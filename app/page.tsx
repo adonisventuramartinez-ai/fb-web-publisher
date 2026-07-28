@@ -22,12 +22,10 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [cargandoPaginas, setCargandoPaginas] = useState(false);
 
-  // 🔧 Forzar el dominio correcto
   const baseUrl = process.env.NODE_ENV === "production" 
     ? "https://fb-web-publisher.vercel.app" 
     : window.location.origin;
 
-  // Al cargar: revisa si venimos de /api/auth/callback con un token en el fragmento (#)
   useEffect(() => {
     const hash = window.location.hash;
     if (hash.startsWith("#token=")) {
@@ -113,121 +111,207 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Navbar */}
-      <nav className="bg-white shadow-lg border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <span className="text-2xl mr-2">🚀</span>
-              <span className="text-xl font-bold text-gray-800">Publicador Multi-Página</span>
-              <span className="ml-3 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Beta</span>
-            </div>
-            <div className="flex items-center gap-4">
-              {token && (
-                <span className="text-sm text-gray-600 hidden sm:block">
-                  ✅ Conectado
-                </span>
-              )}
-            </div>
-          </div>
+    <div style={{ 
+      minHeight: "100vh", 
+      background: "#f0f2f5",
+      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+    }}>
+      {/* Navbar simple */}
+      <nav style={{
+        background: "white",
+        borderBottom: "1px solid #e0e0e0",
+        padding: "12px 24px",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center"
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ fontSize: "24px" }}>📱</span>
+          <span style={{ fontWeight: "bold", fontSize: "18px", color: "#1a1a1a" }}>
+            Publicador Multi-Página
+          </span>
+          <span style={{
+            background: "#e8f0fe",
+            color: "#1a73e8",
+            fontSize: "10px",
+            padding: "2px 8px",
+            borderRadius: "12px",
+            fontWeight: "600"
+          }}>
+            Beta
+          </span>
         </div>
+        {token && (
+          <span style={{ fontSize: "14px", color: "#34a853" }}>
+            ✅ Conectado
+          </span>
+        )}
       </nav>
 
-      {/* Contenido principal */}
-      <main className="max-w-6xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8">
+      {/* Contenido */}
+      <div style={{ maxWidth: "900px", margin: "0 auto", padding: "24px 16px" }}>
+        <div style={{
+          background: "white",
+          borderRadius: "8px",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08)",
+          padding: "24px"
+        }}>
           {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">
+          <div style={{ marginBottom: "24px" }}>
+            <h1 style={{ 
+              fontSize: "24px", 
+              fontWeight: "600", 
+              color: "#1a1a1a",
+              margin: "0 0 4px 0"
+            }}>
               Publica en Múltiples Páginas
             </h1>
-            <p className="text-gray-500 mt-1">
+            <p style={{ 
+              color: "#5f6368", 
+              fontSize: "14px", 
+              margin: "0"
+            }}>
               Selecciona tus páginas y comparte contenido en todas simultáneamente
             </p>
           </div>
 
           {error && (
-            <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm text-red-700">{error}</p>
-                </div>
-              </div>
+            <div style={{
+              background: "#fce8e6",
+              color: "#c62828",
+              padding: "12px 16px",
+              borderRadius: "4px",
+              marginBottom: "16px",
+              fontSize: "14px"
+            }}>
+              ⚠️ {error}
             </div>
           )}
 
           {!token ? (
-            <div className="text-center py-12">
-              <div className="mb-6">
-                <div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center mx-auto">
-                  <svg className="w-12 h-12 text-blue-600" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                  </svg>
-                </div>
+            <div style={{ textAlign: "center", padding: "40px 0" }}>
+              <div style={{
+                width: "80px",
+                height: "80px",
+                background: "#e8f0fe",
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 16px"
+              }}>
+                <span style={{ fontSize: "40px" }}>🔑</span>
               </div>
-              <h2 className="text-2xl font-semibold text-gray-700 mb-2">
+              <h2 style={{ fontSize: "20px", fontWeight: "500", color: "#1a1a1a" }}>
                 Conéctate con Facebook
               </h2>
-              <p className="text-gray-500 mb-6">
-                Para empezar a publicar, necesitas autorizar la aplicación
+              <p style={{ color: "#5f6368", marginBottom: "24px" }}>
+                Autoriza la aplicación para empezar a publicar
               </p>
               <a href={getLoginUrl()}>
-                <button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3 rounded-lg transition-all transform hover:scale-105 shadow-md">
-                  🔑 Conectar con Facebook
+                <button style={{
+                  background: "#1877f2",
+                  color: "white",
+                  border: "none",
+                  padding: "12px 32px",
+                  borderRadius: "6px",
+                  fontSize: "16px",
+                  fontWeight: "600",
+                  cursor: "pointer"
+                }}>
+                  Conectar con Facebook
                 </button>
               </a>
             </div>
           ) : (
             <>
-              {/* Panel de control */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-                <div className="bg-green-50 rounded-xl p-4 border border-green-200">
-                  <p className="text-sm text-green-600 font-medium">Estado</p>
-                  <p className="text-lg font-semibold text-green-800">✅ Conectado</p>
+              {/* Stats */}
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                gap: "12px",
+                marginBottom: "24px"
+              }}>
+                <div style={{
+                  background: "#e6f4ea",
+                  padding: "12px 16px",
+                  borderRadius: "6px"
+                }}>
+                  <div style={{ fontSize: "12px", color: "#1e7e34" }}>Estado</div>
+                  <div style={{ fontSize: "18px", fontWeight: "600", color: "#1e7e34" }}>✅ Conectado</div>
                 </div>
-                <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
-                  <p className="text-sm text-blue-600 font-medium">Páginas</p>
-                  <p className="text-lg font-semibold text-blue-800">{paginas.length}</p>
+                <div style={{
+                  background: "#e8f0fe",
+                  padding: "12px 16px",
+                  borderRadius: "6px"
+                }}>
+                  <div style={{ fontSize: "12px", color: "#1a73e8" }}>Páginas</div>
+                  <div style={{ fontSize: "18px", fontWeight: "600", color: "#1a73e8" }}>{paginas.length}</div>
                 </div>
-                <div className="bg-purple-50 rounded-xl p-4 border border-purple-200">
-                  <p className="text-sm text-purple-600 font-medium">Seleccionadas</p>
-                  <p className="text-lg font-semibold text-purple-800">{seleccionadas.size}</p>
+                <div style={{
+                  background: "#f3e8fd",
+                  padding: "12px 16px",
+                  borderRadius: "6px"
+                }}>
+                  <div style={{ fontSize: "12px", color: "#7c3aed" }}>Seleccionadas</div>
+                  <div style={{ fontSize: "18px", fontWeight: "600", color: "#7c3aed" }}>{seleccionadas.size}</div>
                 </div>
-                <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 flex items-center justify-center">
-                  <button 
-                    onClick={cerrarSesion}
-                    className="text-sm text-gray-600 hover:text-red-600 font-medium transition-colors"
-                  >
-                    🔒 Cerrar sesión
-                  </button>
-                </div>
+                <button
+                  onClick={cerrarSesion}
+                  style={{
+                    background: "#f1f3f4",
+                    border: "none",
+                    padding: "12px 16px",
+                    borderRadius: "6px",
+                    fontSize: "14px",
+                    color: "#5f6368",
+                    cursor: "pointer"
+                  }}
+                >
+                  🔒 Cerrar sesión
+                </button>
               </div>
 
-              {/* Selector de páginas */}
-              <div className="mb-8">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold text-gray-800">
+              {/* Páginas */}
+              <div style={{ marginBottom: "24px" }}>
+                <div style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "12px"
+                }}>
+                  <h3 style={{ fontSize: "16px", fontWeight: "500", color: "#1a1a1a" }}>
                     📋 Páginas disponibles
                   </h3>
-                  <div className="flex gap-2">
+                  <div style={{ display: "flex", gap: "8px" }}>
                     <button
                       onClick={() => {
                         const todas = new Set(paginas.map(p => p.id));
                         setSeleccionadas(todas);
                       }}
-                      className="text-sm bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-lg transition-colors"
+                      style={{
+                        background: "#e8f0fe",
+                        border: "none",
+                        padding: "4px 12px",
+                        borderRadius: "4px",
+                        fontSize: "12px",
+                        color: "#1a73e8",
+                        cursor: "pointer"
+                      }}
                     >
                       Seleccionar todas
                     </button>
                     <button
                       onClick={() => setSeleccionadas(new Set())}
-                      className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded-lg transition-colors"
+                      style={{
+                        background: "#f1f3f4",
+                        border: "none",
+                        padding: "4px 12px",
+                        borderRadius: "4px",
+                        fontSize: "12px",
+                        color: "#5f6368",
+                        cursor: "pointer"
+                      }}
                     >
                       Limpiar
                     </button>
@@ -235,55 +319,76 @@ export default function Home() {
                 </div>
                 
                 {cargandoPaginas ? (
-                  <div className="flex justify-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <div style={{ textAlign: "center", padding: "20px" }}>
+                    Cargando páginas...
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+                    gap: "8px"
+                  }}>
                     {paginas.map((p) => (
                       <label
                         key={p.id}
-                        className={`flex items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                          seleccionadas.has(p.id)
-                            ? 'border-blue-500 bg-blue-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          padding: "10px 12px",
+                          background: seleccionadas.has(p.id) ? "#e8f0fe" : "white",
+                          border: seleccionadas.has(p.id) ? "1px solid #1a73e8" : "1px solid #e0e0e0",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          transition: "all 0.2s"
+                        }}
                       >
                         <input
                           type="checkbox"
                           checked={seleccionadas.has(p.id)}
                           onChange={() => toggleSeleccion(p.id)}
-                          className="w-4 h-4 text-blue-600 rounded"
+                          style={{ marginRight: "8px" }}
                         />
-                        <span className="ml-3 text-sm font-medium text-gray-700">
+                        <span style={{ fontSize: "14px", color: "#1a1a1a" }}>
                           {p.name}
                         </span>
-                        {p.access_token && (
-                          <span className="ml-auto text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
-                            ✅
-                          </span>
-                        )}
                       </label>
                     ))}
                   </div>
                 )}
               </div>
 
-              {/* Formulario de publicación */}
-              <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">
+              {/* Formulario */}
+              <div style={{
+                background: "#f8f9fa",
+                padding: "20px",
+                borderRadius: "6px",
+                border: "1px solid #e0e0e0"
+              }}>
+                <h3 style={{ fontSize: "16px", fontWeight: "500", margin: "0 0 16px 0" }}>
                   ✏️ Crear nueva publicación
                 </h3>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "12px",
+                  marginBottom: "12px"
+                }}>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Tipo de contenido
+                    <label style={{ fontSize: "13px", color: "#5f6368", display: "block", marginBottom: "4px" }}>
+                      Tipo
                     </label>
                     <select
                       value={tipo}
                       onChange={(e) => setTipo(e.target.value as TipoContenido)}
-                      className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      style={{
+                        width: "100%",
+                        padding: "8px 12px",
+                        border: "1px solid #e0e0e0",
+                        borderRadius: "4px",
+                        fontSize: "14px",
+                        background: "white"
+                      }}
                     >
                       <option value="foto">📸 Foto</option>
                       <option value="video">🎬 Video</option>
@@ -291,94 +396,119 @@ export default function Home() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label style={{ fontSize: "13px", color: "#5f6368", display: "block", marginBottom: "4px" }}>
                       Archivo
                     </label>
                     <input
                       type="file"
                       accept={tipo === "foto" ? "image/*" : "video/*"}
                       onChange={(e) => setArchivo(e.target.files?.[0] || null)}
-                      className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      style={{
+                        width: "100%",
+                        padding: "6px",
+                        border: "1px solid #e0e0e0",
+                        borderRadius: "4px",
+                        fontSize: "14px",
+                        background: "white"
+                      }}
                     />
                   </div>
                 </div>
 
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                <div style={{ marginBottom: "12px" }}>
+                  <label style={{ fontSize: "13px", color: "#5f6368", display: "block", marginBottom: "4px" }}>
                     Título
                   </label>
                   <input
                     type="text"
-                    placeholder="Escribe un título atractivo..."
+                    placeholder="Escribe un título..."
                     value={titulo}
                     onChange={(e) => setTitulo(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      border: "1px solid #e0e0e0",
+                      borderRadius: "4px",
+                      fontSize: "14px"
+                    }}
                   />
                 </div>
 
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                <div style={{ marginBottom: "16px" }}>
+                  <label style={{ fontSize: "13px", color: "#5f6368", display: "block", marginBottom: "4px" }}>
                     Mensaje
                   </label>
                   <textarea
-                    placeholder="Escribe el mensaje de tu publicación..."
+                    placeholder="Escribe el mensaje..."
                     value={mensaje}
                     onChange={(e) => setMensaje(e.target.value)}
-                    rows={4}
-                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                    rows={3}
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      border: "1px solid #e0e0e0",
+                      borderRadius: "4px",
+                      fontSize: "14px",
+                      resize: "vertical",
+                      fontFamily: "inherit"
+                    }}
                   />
                 </div>
 
                 <button
                   onClick={handlePublicar}
                   disabled={publicando || seleccionadas.size === 0 || !archivo}
-                  className={`w-full py-3 px-4 rounded-lg font-semibold text-white transition-all ${
-                    publicando || seleccionadas.size === 0 || !archivo
-                      ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-green-600 hover:bg-green-700 hover:scale-[1.02] shadow-md'
-                  }`}
+                  style={{
+                    width: "100%",
+                    padding: "12px",
+                    background: (publicando || seleccionadas.size === 0 || !archivo) ? "#dadce0" : "#1a73e8",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    fontSize: "16px",
+                    fontWeight: "600",
+                    cursor: (publicando || seleccionadas.size === 0 || !archivo) ? "not-allowed" : "pointer"
+                  }}
                 >
-                  {publicando ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Publicando...
-                    </span>
-                  ) : (
-                    `🚀 Publicar en ${seleccionadas.size} página${seleccionadas.size > 1 ? 's' : ''}`
-                  )}
+                  {publicando ? "Publicando..." : `🚀 Publicar en ${seleccionadas.size} página${seleccionadas.size > 1 ? 's' : ''}`}
                 </button>
               </div>
 
               {/* Resultados */}
               {resultados.length > 0 && (
-                <div className="mt-8">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                    📊 Resultados de publicación
+                <div style={{ marginTop: "24px" }}>
+                  <h3 style={{ fontSize: "16px", fontWeight: "500", margin: "0 0 12px 0" }}>
+                    📊 Resultados
                   </h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full bg-white rounded-lg overflow-hidden shadow">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Página</th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Estado</th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Mensaje</th>
+                  <div style={{ overflow: "auto" }}>
+                    <table style={{
+                      width: "100%",
+                      borderCollapse: "collapse",
+                      fontSize: "14px"
+                    }}>
+                      <thead>
+                        <tr style={{ background: "#f8f9fa", borderBottom: "2px solid #e0e0e0" }}>
+                          <th style={{ padding: "10px", textAlign: "left" }}>Página</th>
+                          <th style={{ padding: "10px", textAlign: "left" }}>Estado</th>
+                          <th style={{ padding: "10px", textAlign: "left" }}>Mensaje</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-200">
+                      <tbody>
                         {resultados.map((r, i) => (
-                          <tr key={i} className="hover:bg-gray-50 transition-colors">
-                            <td className="px-4 py-3 text-sm text-gray-700">{r.pagina}</td>
-                            <td className="px-4 py-3">
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                r.exito ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                              }`}>
-                                {r.exito ? '✅ Éxito' : '❌ Error'}
+                          <tr key={i} style={{ borderBottom: "1px solid #f1f3f4" }}>
+                            <td style={{ padding: "10px" }}>{r.pagina}</td>
+                            <td style={{ padding: "10px" }}>
+                              <span style={{
+                                background: r.exito ? "#e6f4ea" : "#fce8e6",
+                                color: r.exito ? "#1e7e34" : "#c62828",
+                                padding: "2px 12px",
+                                borderRadius: "12px",
+                                fontSize: "12px"
+                              }}>
+                                {r.exito ? "✅ Éxito" : "❌ Error"}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-sm text-gray-600">{r.mensaje}</td>
+                            <td style={{ padding: "10px" }}>{r.mensaje}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -389,7 +519,7 @@ export default function Home() {
             </>
           )}
         </div>
-      </main>
+      </div>
     </div>
   );
 }
