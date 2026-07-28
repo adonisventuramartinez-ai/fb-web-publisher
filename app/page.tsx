@@ -9,6 +9,18 @@ interface Resultado {
   mensaje: string;
 }
 
+interface PublicacionHistorial {
+  id: string;
+  fecha: string;
+  tipo: string;
+  titulo: string;
+  mensaje: string;
+  paginas: number;
+  exitos: number;
+  errores: number;
+  resultados: Resultado[];
+}
+
 export default function Home() {
   const [token, setToken] = useState<string | null>(null);
   const [paginas, setPaginas] = useState<FacebookPage[]>([]);
@@ -21,6 +33,8 @@ export default function Home() {
   const [resultados, setResultados] = useState<Resultado[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [cargandoPaginas, setCargandoPaginas] = useState(false);
+  const [historial, setHistorial] = useState<PublicacionHistorial[]>([]);
+  const [mostrarHistorial, setMostrarHistorial] = useState(false);
 
   const baseUrl = process.env.NODE_ENV === "production" 
     ? "https://fb-web-publisher.vercel.app" 
@@ -41,6 +55,18 @@ export default function Home() {
     const params = new URLSearchParams(window.location.search);
     const err = params.get("error");
     if (err) setError(err);
+  }, []);
+
+  // Cargar historial desde localStorage
+  useEffect(() => {
+    const guardado = localStorage.getItem("historial_publicaciones");
+    if (guardado) {
+      try {
+        setHistorial(JSON.parse(guardado));
+      } catch (e) {
+        console.error("Error al cargar historial:", e);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -72,6 +98,13 @@ export default function Home() {
     setToken(null);
     setPaginas([]);
     setSeleccionadas(new Set());
+  }
+
+  function limpiarHistorial() {
+    if (confirm("¿Estás seguro de que quieres eliminar todo el historial?")) {
+      setHistorial([]);
+      localStorage.removeItem("historial_publicaciones");
+    }
   }
 
   function getLoginUrl() {
@@ -106,6 +139,23 @@ export default function Home() {
       nuevosResultados.push({ pagina: pagina.name, exito: r.success, mensaje: r.message });
       setResultados([...nuevosResultados]);
     }
+
+    // Guardar en historial
+    const publicacion: PublicacionHistorial = {
+      id: Date.now().toString(),
+      fecha: new Date().toLocaleString(),
+      tipo: tipo,
+      titulo: titulo || "Sin título",
+      mensaje: mensaje || "Sin mensaje",
+      paginas: nuevosResultados.length,
+      exitos: nuevosResultados.filter(r => r.exito).length,
+      errores: nuevosResultados.filter(r => !r.exito).length,
+      resultados: nuevosResultados
+    };
+
+    const nuevoHistorial = [publicacion, ...historial];
+    setHistorial(nuevoHistorial);
+    localStorage.setItem("historial_publicaciones", JSON.stringify(nuevoHistorial));
 
     setPublicando(false);
   }
@@ -272,248 +322,431 @@ export default function Home() {
                 </button>
               </div>
 
-              {/* Páginas */}
-              <div style={{ marginBottom: "24px" }}>
-                <div style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: "12px"
-                }}>
-                  <h3 style={{ fontSize: "16px", fontWeight: "500", color: "#1a1a1a" }}>
-                    📋 Páginas disponibles
-                  </h3>
-                  <div style={{ display: "flex", gap: "8px" }}>
-                    <button
-                      onClick={() => {
-                        const todas = new Set(paginas.map(p => p.id));
-                        setSeleccionadas(todas);
-                      }}
-                      style={{
-                        background: "#e8f0fe",
-                        border: "none",
-                        padding: "4px 12px",
-                        borderRadius: "4px",
-                        fontSize: "12px",
-                        color: "#1a73e8",
-                        cursor: "pointer"
-                      }}
-                    >
-                      Seleccionar todas
-                    </button>
-                    <button
-                      onClick={() => setSeleccionadas(new Set())}
-                      style={{
-                        background: "#f1f3f4",
-                        border: "none",
-                        padding: "4px 12px",
-                        borderRadius: "4px",
-                        fontSize: "12px",
-                        color: "#5f6368",
-                        cursor: "pointer"
-                      }}
-                    >
-                      Limpiar
-                    </button>
-                  </div>
-                </div>
-                
-                {cargandoPaginas ? (
-                  <div style={{ textAlign: "center", padding: "20px" }}>
-                    Cargando páginas...
-                  </div>
-                ) : (
-                  <div style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-                    gap: "8px"
-                  }}>
-                    {paginas.map((p) => (
-                      <label
-                        key={p.id}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          padding: "10px 12px",
-                          background: seleccionadas.has(p.id) ? "#e8f0fe" : "white",
-                          border: seleccionadas.has(p.id) ? "1px solid #1a73e8" : "1px solid #e0e0e0",
-                          borderRadius: "6px",
-                          cursor: "pointer",
-                          transition: "all 0.2s"
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={seleccionadas.has(p.id)}
-                          onChange={() => toggleSeleccion(p.id)}
-                          style={{ marginRight: "8px" }}
-                        />
-                        <span style={{ fontSize: "14px", color: "#1a1a1a" }}>
-                          {p.name}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Formulario */}
+              {/* Tabs: Publicar | Historial */}
               <div style={{
-                background: "#f8f9fa",
-                padding: "20px",
-                borderRadius: "6px",
-                border: "1px solid #e0e0e0"
+                display: "flex",
+                gap: "8px",
+                marginBottom: "20px",
+                borderBottom: "1px solid #e0e0e0",
+                paddingBottom: "12px"
               }}>
-                <h3 style={{ fontSize: "16px", fontWeight: "500", margin: "0 0 16px 0" }}>
-                  ✏️ Crear nueva publicación
-                </h3>
-                
-                <div style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: "12px",
-                  marginBottom: "12px"
-                }}>
-                  <div>
-                    <label style={{ fontSize: "13px", color: "#5f6368", display: "block", marginBottom: "4px" }}>
-                      Tipo
-                    </label>
-                    <select
-                      value={tipo}
-                      onChange={(e) => setTipo(e.target.value as TipoContenido)}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        border: "1px solid #e0e0e0",
-                        borderRadius: "4px",
-                        fontSize: "14px",
-                        background: "white"
-                      }}
-                    >
-                      <option value="foto">📸 Foto</option>
-                      <option value="video">🎬 Video</option>
-                      <option value="reel">📹 Reel</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: "13px", color: "#5f6368", display: "block", marginBottom: "4px" }}>
-                      Archivo
-                    </label>
-                    <input
-                      type="file"
-                      accept={tipo === "foto" ? "image/*" : "video/*"}
-                      onChange={(e) => setArchivo(e.target.files?.[0] || null)}
-                      style={{
-                        width: "100%",
-                        padding: "6px",
-                        border: "1px solid #e0e0e0",
-                        borderRadius: "4px",
-                        fontSize: "14px",
-                        background: "white"
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: "12px" }}>
-                  <label style={{ fontSize: "13px", color: "#5f6368", display: "block", marginBottom: "4px" }}>
-                    Título
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Escribe un título..."
-                    value={titulo}
-                    onChange={(e) => setTitulo(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "8px 12px",
-                      border: "1px solid #e0e0e0",
-                      borderRadius: "4px",
-                      fontSize: "14px"
-                    }}
-                  />
-                </div>
-
-                <div style={{ marginBottom: "16px" }}>
-                  <label style={{ fontSize: "13px", color: "#5f6368", display: "block", marginBottom: "4px" }}>
-                    Mensaje
-                  </label>
-                  <textarea
-                    placeholder="Escribe el mensaje..."
-                    value={mensaje}
-                    onChange={(e) => setMensaje(e.target.value)}
-                    rows={3}
-                    style={{
-                      width: "100%",
-                      padding: "8px 12px",
-                      border: "1px solid #e0e0e0",
-                      borderRadius: "4px",
-                      fontSize: "14px",
-                      resize: "vertical",
-                      fontFamily: "inherit"
-                    }}
-                  />
-                </div>
-
                 <button
-                  onClick={handlePublicar}
-                  disabled={publicando || seleccionadas.size === 0 || !archivo}
+                  onClick={() => setMostrarHistorial(false)}
                   style={{
-                    width: "100%",
-                    padding: "12px",
-                    background: (publicando || seleccionadas.size === 0 || !archivo) ? "#dadce0" : "#1a73e8",
-                    color: "white",
+                    padding: "8px 16px",
+                    background: !mostrarHistorial ? "#e8f0fe" : "transparent",
                     border: "none",
-                    borderRadius: "6px",
-                    fontSize: "16px",
-                    fontWeight: "600",
-                    cursor: (publicando || seleccionadas.size === 0 || !archivo) ? "not-allowed" : "pointer"
+                    borderRadius: "4px",
+                    color: !mostrarHistorial ? "#1a73e8" : "#5f6368",
+                    fontWeight: !mostrarHistorial ? "600" : "400",
+                    cursor: "pointer"
                   }}
                 >
-                  {publicando ? "Publicando..." : `🚀 Publicar en ${seleccionadas.size} página${seleccionadas.size > 1 ? 's' : ''}`}
+                  ✏️ Publicar
+                </button>
+                <button
+                  onClick={() => setMostrarHistorial(true)}
+                  style={{
+                    padding: "8px 16px",
+                    background: mostrarHistorial ? "#e8f0fe" : "transparent",
+                    border: "none",
+                    borderRadius: "4px",
+                    color: mostrarHistorial ? "#1a73e8" : "#5f6368",
+                    fontWeight: mostrarHistorial ? "600" : "400",
+                    cursor: "pointer"
+                  }}
+                >
+                  📜 Historial ({historial.length})
                 </button>
               </div>
 
-              {/* Resultados */}
-              {resultados.length > 0 && (
-                <div style={{ marginTop: "24px" }}>
-                  <h3 style={{ fontSize: "16px", fontWeight: "500", margin: "0 0 12px 0" }}>
-                    📊 Resultados
-                  </h3>
-                  <div style={{ overflow: "auto" }}>
-                    <table style={{
-                      width: "100%",
-                      borderCollapse: "collapse",
-                      fontSize: "14px"
+              {/* Contenido según tab */}
+              {!mostrarHistorial ? (
+                <>
+                  {/* Páginas */}
+                  <div style={{ marginBottom: "24px" }}>
+                    <div style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: "12px"
                     }}>
-                      <thead>
-                        <tr style={{ background: "#f8f9fa", borderBottom: "2px solid #e0e0e0" }}>
-                          <th style={{ padding: "10px", textAlign: "left" }}>Página</th>
-                          <th style={{ padding: "10px", textAlign: "left" }}>Estado</th>
-                          <th style={{ padding: "10px", textAlign: "left" }}>Mensaje</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {resultados.map((r, i) => (
-                          <tr key={i} style={{ borderBottom: "1px solid #f1f3f4" }}>
-                            <td style={{ padding: "10px" }}>{r.pagina}</td>
-                            <td style={{ padding: "10px" }}>
+                      <h3 style={{ fontSize: "16px", fontWeight: "500", color: "#1a1a1a" }}>
+                        📋 Páginas disponibles
+                      </h3>
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <button
+                          onClick={() => {
+                            const todas = new Set(paginas.map(p => p.id));
+                            setSeleccionadas(todas);
+                          }}
+                          style={{
+                            background: "#e8f0fe",
+                            border: "none",
+                            padding: "4px 12px",
+                            borderRadius: "4px",
+                            fontSize: "12px",
+                            color: "#1a73e8",
+                            cursor: "pointer"
+                          }}
+                        >
+                          Seleccionar todas
+                        </button>
+                        <button
+                          onClick={() => setSeleccionadas(new Set())}
+                          style={{
+                            background: "#f1f3f4",
+                            border: "none",
+                            padding: "4px 12px",
+                            borderRadius: "4px",
+                            fontSize: "12px",
+                            color: "#5f6368",
+                            cursor: "pointer"
+                          }}
+                        >
+                          Limpiar
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {cargandoPaginas ? (
+                      <div style={{ textAlign: "center", padding: "20px" }}>
+                        Cargando páginas...
+                      </div>
+                    ) : (
+                      <div style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+                        gap: "8px"
+                      }}>
+                        {paginas.map((p) => (
+                          <label
+                            key={p.id}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              padding: "10px 12px",
+                              background: seleccionadas.has(p.id) ? "#e8f0fe" : "white",
+                              border: seleccionadas.has(p.id) ? "1px solid #1a73e8" : "1px solid #e0e0e0",
+                              borderRadius: "6px",
+                              cursor: "pointer",
+                              transition: "all 0.2s"
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={seleccionadas.has(p.id)}
+                              onChange={() => toggleSeleccion(p.id)}
+                              style={{ marginRight: "8px" }}
+                            />
+                            <span style={{ fontSize: "14px", color: "#1a1a1a" }}>
+                              {p.name}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Formulario */}
+                  <div style={{
+                    background: "#f8f9fa",
+                    padding: "20px",
+                    borderRadius: "6px",
+                    border: "1px solid #e0e0e0"
+                  }}>
+                    <h3 style={{ fontSize: "16px", fontWeight: "500", margin: "0 0 16px 0" }}>
+                      ✏️ Crear nueva publicación
+                    </h3>
+                    
+                    <div style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "12px",
+                      marginBottom: "12px"
+                    }}>
+                      <div>
+                        <label style={{ fontSize: "13px", color: "#5f6368", display: "block", marginBottom: "4px" }}>
+                          Tipo
+                        </label>
+                        <select
+                          value={tipo}
+                          onChange={(e) => setTipo(e.target.value as TipoContenido)}
+                          style={{
+                            width: "100%",
+                            padding: "8px 12px",
+                            border: "1px solid #e0e0e0",
+                            borderRadius: "4px",
+                            fontSize: "14px",
+                            background: "white"
+                          }}
+                        >
+                          <option value="foto">📸 Foto</option>
+                          <option value="video">🎬 Video</option>
+                          <option value="reel">📹 Reel</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: "13px", color: "#5f6368", display: "block", marginBottom: "4px" }}>
+                          Archivo
+                        </label>
+                        <input
+                          type="file"
+                          accept={tipo === "foto" ? "image/*" : "video/*"}
+                          onChange={(e) => setArchivo(e.target.files?.[0] || null)}
+                          style={{
+                            width: "100%",
+                            padding: "6px",
+                            border: "1px solid #e0e0e0",
+                            borderRadius: "4px",
+                            fontSize: "14px",
+                            background: "white"
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: "12px" }}>
+                      <label style={{ fontSize: "13px", color: "#5f6368", display: "block", marginBottom: "4px" }}>
+                        Título
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Escribe un título..."
+                        value={titulo}
+                        onChange={(e) => setTitulo(e.target.value)}
+                        style={{
+                          width: "100%",
+                          padding: "8px 12px",
+                          border: "1px solid #e0e0e0",
+                          borderRadius: "4px",
+                          fontSize: "14px"
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ marginBottom: "16px" }}>
+                      <label style={{ fontSize: "13px", color: "#5f6368", display: "block", marginBottom: "4px" }}>
+                        Mensaje
+                      </label>
+                      <textarea
+                        placeholder="Escribe el mensaje..."
+                        value={mensaje}
+                        onChange={(e) => setMensaje(e.target.value)}
+                        rows={3}
+                        style={{
+                          width: "100%",
+                          padding: "8px 12px",
+                          border: "1px solid #e0e0e0",
+                          borderRadius: "4px",
+                          fontSize: "14px",
+                          resize: "vertical",
+                          fontFamily: "inherit"
+                        }}
+                      />
+                    </div>
+
+                    <button
+                      onClick={handlePublicar}
+                      disabled={publicando || seleccionadas.size === 0 || !archivo}
+                      style={{
+                        width: "100%",
+                        padding: "12px",
+                        background: (publicando || seleccionadas.size === 0 || !archivo) ? "#dadce0" : "#1a73e8",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "6px",
+                        fontSize: "16px",
+                        fontWeight: "600",
+                        cursor: (publicando || seleccionadas.size === 0 || !archivo) ? "not-allowed" : "pointer"
+                      }}
+                    >
+                      {publicando ? "Publicando..." : `🚀 Publicar en ${seleccionadas.size} página${seleccionadas.size > 1 ? 's' : ''}`}
+                    </button>
+                  </div>
+
+                  {/* Resultados */}
+                  {resultados.length > 0 && (
+                    <div style={{ marginTop: "24px" }}>
+                      <h3 style={{ fontSize: "16px", fontWeight: "500", margin: "0 0 12px 0" }}>
+                        📊 Resultados
+                      </h3>
+                      <div style={{ overflow: "auto" }}>
+                        <table style={{
+                          width: "100%",
+                          borderCollapse: "collapse",
+                          fontSize: "14px"
+                        }}>
+                          <thead>
+                            <tr style={{ background: "#f8f9fa", borderBottom: "2px solid #e0e0e0" }}>
+                              <th style={{ padding: "10px", textAlign: "left" }}>Página</th>
+                              <th style={{ padding: "10px", textAlign: "left" }}>Estado</th>
+                              <th style={{ padding: "10px", textAlign: "left" }}>Mensaje</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {resultados.map((r, i) => (
+                              <tr key={i} style={{ borderBottom: "1px solid #f1f3f4" }}>
+                                <td style={{ padding: "10px" }}>{r.pagina}</td>
+                                <td style={{ padding: "10px" }}>
+                                  <span style={{
+                                    background: r.exito ? "#e6f4ea" : "#fce8e6",
+                                    color: r.exito ? "#1e7e34" : "#c62828",
+                                    padding: "2px 12px",
+                                    borderRadius: "12px",
+                                    fontSize: "12px"
+                                  }}>
+                                    {r.exito ? "✅ Éxito" : "❌ Error"}
+                                  </span>
+                                </td>
+                                <td style={{ padding: "10px" }}>{r.mensaje}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                // Historial
+                <div>
+                  <div style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: "16px"
+                  }}>
+                    <h3 style={{ fontSize: "16px", fontWeight: "500", margin: "0" }}>
+                      📜 Historial de publicaciones
+                    </h3>
+                    {historial.length > 0 && (
+                      <button
+                        onClick={limpiarHistorial}
+                        style={{
+                          background: "#fce8e6",
+                          border: "none",
+                          padding: "4px 12px",
+                          borderRadius: "4px",
+                          fontSize: "12px",
+                          color: "#c62828",
+                          cursor: "pointer"
+                        }}
+                      >
+                        🗑️ Limpiar historial
+                      </button>
+                    )}
+                  </div>
+
+                  {historial.length === 0 ? (
+                    <div style={{
+                      textAlign: "center",
+                      padding: "40px 20px",
+                      color: "#5f6368"
+                    }}>
+                      <span style={{ fontSize: "48px", display: "block", marginBottom: "12px" }}>
+                        📭
+                      </span>
+                      <p>No hay publicaciones en el historial</p>
+                      <p style={{ fontSize: "13px" }}>
+                        Tus publicaciones aparecerán aquí después de publicar
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                      {historial.map((pub) => (
+                        <div key={pub.id} style={{
+                          border: "1px solid #e0e0e0",
+                          borderRadius: "6px",
+                          padding: "16px",
+                          background: "white"
+                        }}>
+                          <div style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "flex-start",
+                            flexWrap: "wrap",
+                            gap: "8px"
+                          }}>
+                            <div>
+                              <div style={{ fontWeight: "600", color: "#1a1a1a" }}>
+                                {pub.titulo}
+                              </div>
+                              <div style={{ fontSize: "13px", color: "#5f6368" }}>
+                                {pub.fecha} • {pub.tipo} • {pub.paginas} páginas
+                              </div>
+                            </div>
+                            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                               <span style={{
-                                background: r.exito ? "#e6f4ea" : "#fce8e6",
-                                color: r.exito ? "#1e7e34" : "#c62828",
-                                padding: "2px 12px",
+                                background: pub.exitos > 0 ? "#e6f4ea" : "#f1f3f4",
+                                color: "#1e7e34",
+                                padding: "2px 10px",
                                 borderRadius: "12px",
                                 fontSize: "12px"
                               }}>
-                                {r.exito ? "✅ Éxito" : "❌ Error"}
+                                ✅ {pub.exitos}
                               </span>
-                            </td>
-                            <td style={{ padding: "10px" }}>{r.mensaje}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                              {pub.errores > 0 && (
+                                <span style={{
+                                  background: "#fce8e6",
+                                  color: "#c62828",
+                                  padding: "2px 10px",
+                                  borderRadius: "12px",
+                                  fontSize: "12px"
+                                }}>
+                                  ❌ {pub.errores}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {pub.mensaje && pub.mensaje !== "Sin mensaje" && (
+                            <div style={{
+                              fontSize: "13px",
+                              color: "#3c4043",
+                              marginTop: "8px",
+                              padding: "8px",
+                              background: "#f8f9fa",
+                              borderRadius: "4px"
+                            }}>
+                              {pub.mensaje}
+                            </div>
+                          )}
+                          {pub.resultados.length > 0 && (
+                            <details style={{ marginTop: "8px" }}>
+                              <summary style={{
+                                fontSize: "13px",
+                                color: "#1a73e8",
+                                cursor: "pointer"
+                              }}>
+                                Ver detalles por página
+                              </summary>
+                              <div style={{
+                                marginTop: "8px",
+                                padding: "8px",
+                                background: "#f8f9fa",
+                                borderRadius: "4px",
+                                fontSize: "13px"
+                              }}>
+                                {pub.resultados.map((r, i) => (
+                                  <div key={i} style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    padding: "4px 0",
+                                    borderBottom: i < pub.resultados.length - 1 ? "1px solid #e0e0e0" : "none"
+                                  }}>
+                                    <span>{r.pagina}</span>
+                                    <span style={{ color: r.exito ? "#1e7e34" : "#c62828" }}>
+                                      {r.exito ? "✅" : "❌"} {r.mensaje}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </details>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </>
