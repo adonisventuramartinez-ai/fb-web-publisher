@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { obtenerPaginas, publicarContenido, FacebookPage, TipoContenido } from "../lib/facebook";
+import Dashboard from "../components/Dashboard";
 
 interface Resultado {
   pagina: string;
@@ -34,7 +35,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [cargandoPaginas, setCargandoPaginas] = useState(false);
   const [historial, setHistorial] = useState<PublicacionHistorial[]>([]);
-  const [mostrarHistorial, setMostrarHistorial] = useState(false);
+  const [tabActivo, setTabActivo] = useState<"publicar" | "historial" | "dashboard">("publicar");
 
   const baseUrl = process.env.NODE_ENV === "production" 
     ? "https://fb-web-publisher.vercel.app" 
@@ -188,7 +189,7 @@ export default function Home() {
             borderRadius: "12px",
             fontWeight: "600"
           }}>
-            Beta
+            Pro
           </span>
         </div>
         {token && (
@@ -322,46 +323,207 @@ export default function Home() {
                 </button>
               </div>
 
-              {/* Tabs: Publicar | Historial */}
+              {/* Tabs: Publicar | Historial | Dashboard */}
               <div style={{
                 display: "flex",
                 gap: "8px",
                 marginBottom: "20px",
                 borderBottom: "1px solid #e0e0e0",
-                paddingBottom: "12px"
+                paddingBottom: "12px",
+                overflowX: "auto"
               }}>
                 <button
-                  onClick={() => setMostrarHistorial(false)}
+                  onClick={() => setTabActivo("publicar")}
                   style={{
                     padding: "8px 16px",
-                    background: !mostrarHistorial ? "#e8f0fe" : "transparent",
+                    background: tabActivo === "publicar" ? "#e8f0fe" : "transparent",
                     border: "none",
                     borderRadius: "4px",
-                    color: !mostrarHistorial ? "#1a73e8" : "#5f6368",
-                    fontWeight: !mostrarHistorial ? "600" : "400",
-                    cursor: "pointer"
+                    color: tabActivo === "publicar" ? "#1a73e8" : "#5f6368",
+                    fontWeight: tabActivo === "publicar" ? "600" : "400",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap"
                   }}
                 >
                   ✏️ Publicar
                 </button>
                 <button
-                  onClick={() => setMostrarHistorial(true)}
+                  onClick={() => setTabActivo("historial")}
                   style={{
                     padding: "8px 16px",
-                    background: mostrarHistorial ? "#e8f0fe" : "transparent",
+                    background: tabActivo === "historial" ? "#e8f0fe" : "transparent",
                     border: "none",
                     borderRadius: "4px",
-                    color: mostrarHistorial ? "#1a73e8" : "#5f6368",
-                    fontWeight: mostrarHistorial ? "600" : "400",
-                    cursor: "pointer"
+                    color: tabActivo === "historial" ? "#1a73e8" : "#5f6368",
+                    fontWeight: tabActivo === "historial" ? "600" : "400",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap"
                   }}
                 >
                   📜 Historial ({historial.length})
                 </button>
+                <button
+                  onClick={() => setTabActivo("dashboard")}
+                  style={{
+                    padding: "8px 16px",
+                    background: tabActivo === "dashboard" ? "#e8f0fe" : "transparent",
+                    border: "none",
+                    borderRadius: "4px",
+                    color: tabActivo === "dashboard" ? "#1a73e8" : "#5f6368",
+                    fontWeight: tabActivo === "dashboard" ? "600" : "400",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap"
+                  }}
+                >
+                  📊 Dashboard
+                </button>
               </div>
 
               {/* Contenido según tab */}
-              {!mostrarHistorial ? (
+              {tabActivo === "dashboard" ? (
+                <Dashboard historial={historial} />
+              ) : tabActivo === "historial" ? (
+                // Historial
+                <div>
+                  <div style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: "16px"
+                  }}>
+                    <h3 style={{ fontSize: "16px", fontWeight: "500", margin: "0" }}>
+                      📜 Historial de publicaciones
+                    </h3>
+                    {historial.length > 0 && (
+                      <button
+                        onClick={limpiarHistorial}
+                        style={{
+                          background: "#fce8e6",
+                          border: "none",
+                          padding: "4px 12px",
+                          borderRadius: "4px",
+                          fontSize: "12px",
+                          color: "#c62828",
+                          cursor: "pointer"
+                        }}
+                      >
+                        🗑️ Limpiar historial
+                      </button>
+                    )}
+                  </div>
+
+                  {historial.length === 0 ? (
+                    <div style={{
+                      textAlign: "center",
+                      padding: "40px 20px",
+                      color: "#5f6368"
+                    }}>
+                      <span style={{ fontSize: "48px", display: "block", marginBottom: "12px" }}>
+                        📭
+                      </span>
+                      <p>No hay publicaciones en el historial</p>
+                      <p style={{ fontSize: "13px" }}>
+                        Tus publicaciones aparecerán aquí después de publicar
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                      {historial.map((pub) => (
+                        <div key={pub.id} style={{
+                          border: "1px solid #e0e0e0",
+                          borderRadius: "6px",
+                          padding: "16px",
+                          background: "white"
+                        }}>
+                          <div style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "flex-start",
+                            flexWrap: "wrap",
+                            gap: "8px"
+                          }}>
+                            <div>
+                              <div style={{ fontWeight: "600", color: "#1a1a1a" }}>
+                                {pub.titulo}
+                              </div>
+                              <div style={{ fontSize: "13px", color: "#5f6368" }}>
+                                {pub.fecha} • {pub.tipo} • {pub.paginas} páginas
+                              </div>
+                            </div>
+                            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                              <span style={{
+                                background: pub.exitos > 0 ? "#e6f4ea" : "#f1f3f4",
+                                color: "#1e7e34",
+                                padding: "2px 10px",
+                                borderRadius: "12px",
+                                fontSize: "12px"
+                              }}>
+                                ✅ {pub.exitos}
+                              </span>
+                              {pub.errores > 0 && (
+                                <span style={{
+                                  background: "#fce8e6",
+                                  color: "#c62828",
+                                  padding: "2px 10px",
+                                  borderRadius: "12px",
+                                  fontSize: "12px"
+                                }}>
+                                  ❌ {pub.errores}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {pub.mensaje && pub.mensaje !== "Sin mensaje" && (
+                            <div style={{
+                              fontSize: "13px",
+                              color: "#3c4043",
+                              marginTop: "8px",
+                              padding: "8px",
+                              background: "#f8f9fa",
+                              borderRadius: "4px"
+                            }}>
+                              {pub.mensaje}
+                            </div>
+                          )}
+                          {pub.resultados.length > 0 && (
+                            <details style={{ marginTop: "8px" }}>
+                              <summary style={{
+                                fontSize: "13px",
+                                color: "#1a73e8",
+                                cursor: "pointer"
+                              }}>
+                                Ver detalles por página
+                              </summary>
+                              <div style={{
+                                marginTop: "8px",
+                                padding: "8px",
+                                background: "#f8f9fa",
+                                borderRadius: "4px",
+                                fontSize: "13px"
+                              }}>
+                                {pub.resultados.map((r, i) => (
+                                  <div key={i} style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    padding: "4px 0",
+                                    borderBottom: i < pub.resultados.length - 1 ? "1px solid #e0e0e0" : "none"
+                                  }}>
+                                    <span>{r.pagina}</span>
+                                    <span style={{ color: r.exito ? "#1e7e34" : "#c62828" }}>
+                                      {r.exito ? "✅" : "❌"} {r.mensaje}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </details>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // Publicar
                 <>
                   {/* Páginas */}
                   <div style={{ marginBottom: "24px" }}>
@@ -608,146 +770,6 @@ export default function Home() {
                     </div>
                   )}
                 </>
-              ) : (
-                // Historial
-                <div>
-                  <div style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: "16px"
-                  }}>
-                    <h3 style={{ fontSize: "16px", fontWeight: "500", margin: "0" }}>
-                      📜 Historial de publicaciones
-                    </h3>
-                    {historial.length > 0 && (
-                      <button
-                        onClick={limpiarHistorial}
-                        style={{
-                          background: "#fce8e6",
-                          border: "none",
-                          padding: "4px 12px",
-                          borderRadius: "4px",
-                          fontSize: "12px",
-                          color: "#c62828",
-                          cursor: "pointer"
-                        }}
-                      >
-                        🗑️ Limpiar historial
-                      </button>
-                    )}
-                  </div>
-
-                  {historial.length === 0 ? (
-                    <div style={{
-                      textAlign: "center",
-                      padding: "40px 20px",
-                      color: "#5f6368"
-                    }}>
-                      <span style={{ fontSize: "48px", display: "block", marginBottom: "12px" }}>
-                        📭
-                      </span>
-                      <p>No hay publicaciones en el historial</p>
-                      <p style={{ fontSize: "13px" }}>
-                        Tus publicaciones aparecerán aquí después de publicar
-                      </p>
-                    </div>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                      {historial.map((pub) => (
-                        <div key={pub.id} style={{
-                          border: "1px solid #e0e0e0",
-                          borderRadius: "6px",
-                          padding: "16px",
-                          background: "white"
-                        }}>
-                          <div style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "flex-start",
-                            flexWrap: "wrap",
-                            gap: "8px"
-                          }}>
-                            <div>
-                              <div style={{ fontWeight: "600", color: "#1a1a1a" }}>
-                                {pub.titulo}
-                              </div>
-                              <div style={{ fontSize: "13px", color: "#5f6368" }}>
-                                {pub.fecha} • {pub.tipo} • {pub.paginas} páginas
-                              </div>
-                            </div>
-                            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                              <span style={{
-                                background: pub.exitos > 0 ? "#e6f4ea" : "#f1f3f4",
-                                color: "#1e7e34",
-                                padding: "2px 10px",
-                                borderRadius: "12px",
-                                fontSize: "12px"
-                              }}>
-                                ✅ {pub.exitos}
-                              </span>
-                              {pub.errores > 0 && (
-                                <span style={{
-                                  background: "#fce8e6",
-                                  color: "#c62828",
-                                  padding: "2px 10px",
-                                  borderRadius: "12px",
-                                  fontSize: "12px"
-                                }}>
-                                  ❌ {pub.errores}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          {pub.mensaje && pub.mensaje !== "Sin mensaje" && (
-                            <div style={{
-                              fontSize: "13px",
-                              color: "#3c4043",
-                              marginTop: "8px",
-                              padding: "8px",
-                              background: "#f8f9fa",
-                              borderRadius: "4px"
-                            }}>
-                              {pub.mensaje}
-                            </div>
-                          )}
-                          {pub.resultados.length > 0 && (
-                            <details style={{ marginTop: "8px" }}>
-                              <summary style={{
-                                fontSize: "13px",
-                                color: "#1a73e8",
-                                cursor: "pointer"
-                              }}>
-                                Ver detalles por página
-                              </summary>
-                              <div style={{
-                                marginTop: "8px",
-                                padding: "8px",
-                                background: "#f8f9fa",
-                                borderRadius: "4px",
-                                fontSize: "13px"
-                              }}>
-                                {pub.resultados.map((r, i) => (
-                                  <div key={i} style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    padding: "4px 0",
-                                    borderBottom: i < pub.resultados.length - 1 ? "1px solid #e0e0e0" : "none"
-                                  }}>
-                                    <span>{r.pagina}</span>
-                                    <span style={{ color: r.exito ? "#1e7e34" : "#c62828" }}>
-                                      {r.exito ? "✅" : "❌"} {r.mensaje}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            </details>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
               )}
             </>
           )}
