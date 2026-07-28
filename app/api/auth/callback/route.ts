@@ -7,17 +7,25 @@ export async function GET(req: NextRequest) {
   const code = searchParams.get("code");
   const error = searchParams.get("error_description") || searchParams.get("error");
 
+  // 🔧 FIX: Forzar el dominio correcto (tu URL de Vercel)
+  const allowedDomain = "https://fb-web-publisher.vercel.app";
+  
+  // Usar el dominio permitido en producción, o el origin en desarrollo
+  const baseUrl = process.env.NODE_ENV === "production" 
+    ? allowedDomain 
+    : origin;
+
   if (error) {
-    return NextResponse.redirect(`${origin}/?error=${encodeURIComponent(error)}`);
+    return NextResponse.redirect(`${baseUrl}/?error=${encodeURIComponent(error)}`);
   }
 
   if (!code) {
-    return NextResponse.redirect(`${origin}/?error=No se recibió el código de autorización`);
+    return NextResponse.redirect(`${baseUrl}/?error=No se recibió el código de autorización`);
   }
 
   const APP_ID = process.env.FB_APP_ID!;
   const APP_SECRET = process.env.FB_APP_SECRET!;
-  const REDIRECT_URI = `${origin}/api/auth/callback`;
+  const REDIRECT_URI = `${baseUrl}/api/auth/callback`;
 
   try {
     // 1) Intercambia el "code" por un access_token de corta duración
@@ -50,8 +58,8 @@ export async function GET(req: NextRequest) {
 
     // 3) Manda el token de vuelta al navegador en el fragmento (#) de la URL,
     //    que NO se envía a ningún servidor - solo lo lee el JavaScript del cliente.
-    return NextResponse.redirect(`${origin}/#token=${finalToken}`);
+    return NextResponse.redirect(`${baseUrl}/#token=${finalToken}`);
   } catch (err: any) {
-    return NextResponse.redirect(`${origin}/?error=${encodeURIComponent(err.message)}`);
+    return NextResponse.redirect(`${baseUrl}/?error=${encodeURIComponent(err.message)}`);
   }
 }
