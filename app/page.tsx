@@ -22,6 +22,11 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [cargandoPaginas, setCargandoPaginas] = useState(false);
 
+  // 🔧 FIX: Forzar el dominio correcto (tu URL de Vercel)
+  const baseUrl = process.env.NODE_ENV === "production" 
+    ? "https://fb-web-publisher.vercel.app" 
+    : window.location.origin;
+
   // Al cargar: revisa si venimos de /api/auth/callback con un token en el fragmento (#)
   useEffect(() => {
     const hash = window.location.hash;
@@ -69,6 +74,20 @@ export default function Home() {
     setToken(null);
     setPaginas([]);
     setSeleccionadas(new Set());
+  }
+
+  // 🔧 FUNCIÓN MODIFICADA: Usa la URL base forzada
+  function getLoginUrl() {
+    const APP_ID = process.env.NEXT_PUBLIC_FB_APP_ID;
+    const redirectUri = `${baseUrl}/api/auth/callback`;
+    
+    return (
+      `https://www.facebook.com/v19.0/dialog/oauth` +
+      `?client_id=${APP_ID}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&scope=pages_manage_posts,pages_read_engagement,pages_show_list,pages_read_user_content` +
+      `&response_type=code`
+    );
   }
 
   async function handlePublicar() {
