@@ -112,7 +112,6 @@ export default function Dashboard({ historial, theme }: DashboardProps) {
 
   return (
     <div>
-      {/* Filtros de rango */}
       <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
         {filtros.map((f) => (
           <button
@@ -133,7 +132,6 @@ export default function Dashboard({ historial, theme }: DashboardProps) {
         ))}
       </div>
 
-      {/* KPIs */}
       <div
         style={{
           display: "grid",
@@ -160,7 +158,6 @@ export default function Dashboard({ historial, theme }: DashboardProps) {
         </div>
       </div>
 
-      {/* Tendencia */}
       {tendencia.length > 0 && (
         <div style={{ background: theme.cardBg, padding: "20px", borderRadius: "8px", border: `1px solid ${theme.border}`, marginBottom: "24px" }}>
           <h4 style={{ fontSize: "15px", fontWeight: 500, margin: "0 0 16px 0", color: theme.text }}>
@@ -179,7 +176,6 @@ export default function Dashboard({ historial, theme }: DashboardProps) {
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "24px" }}>
-        {/* Pastel éxito/error */}
         {(stats.exitos > 0 || stats.errores > 0) && (
           <div style={{ background: theme.cardBg, padding: "20px", borderRadius: "8px", border: `1px solid ${theme.border}` }}>
             <h4 style={{ fontSize: "15px", fontWeight: 500, margin: "0 0 16px 0", color: theme.text }}>
@@ -199,7 +195,6 @@ export default function Dashboard({ historial, theme }: DashboardProps) {
           </div>
         )}
 
-        {/* Ranking */}
         {ranking.length > 0 && (
           <div style={{ background: theme.cardBg, padding: "20px", borderRadius: "8px", border: `1px solid ${theme.border}` }}>
             <h4 style={{ fontSize: "15px", fontWeight: 500, margin: "0 0 16px 0", color: theme.text }}>
