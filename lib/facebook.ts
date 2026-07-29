@@ -18,9 +18,9 @@ export interface ValidacionArchivo {
   error?: string;
 }
 
-// Límites orientativos de la Graph API (no son un límite duro de FB en todos los casos,
-// pero evitan que el usuario intente subir algo que va a fallar del lado de Facebook).
-const LIMITES = {
+// Límites orientativos de la Graph API (evitan que el usuario intente subir
+// algo que va a fallar del lado de Facebook).
+const LIMITES: Record<TipoContenido, { maxBytes: number; tipos: string[] }> = {
   foto: { maxBytes: 10 * 1024 * 1024, tipos: ["image/jpeg", "image/png", "image/gif", "image/webp"] },
   video: { maxBytes: 1024 * 1024 * 1024 * 4, tipos: ["video/mp4", "video/quicktime", "video/x-msvideo"] },
   reel: { maxBytes: 1024 * 1024 * 1024, tipos: ["video/mp4", "video/quicktime"] },
@@ -29,7 +29,10 @@ const LIMITES = {
 export function validarArchivo(archivo: File, tipo: TipoContenido): ValidacionArchivo {
   const limite = LIMITES[tipo];
 
-  if (!limite.tipos.some((t) => archivo.type === t || archivo.type.startsWith(t.split("/")[0] + "/"))) {
+  const tipoValido = limite.tipos.some(
+    (t) => archivo.type === t || archivo.type.startsWith(t.split("/")[0] + "/")
+  );
+  if (!tipoValido) {
     return {
       valido: false,
       error: `Formato no soportado para ${tipo}. Usa: ${limite.tipos.join(", ")}`,
