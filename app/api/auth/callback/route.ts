@@ -9,16 +9,13 @@ export async function GET(req: NextRequest) {
 
   // 🔧 FIX: Forzar el dominio correcto (tu URL de Vercel)
   const allowedDomain = "https://fb-web-publisher.vercel.app";
-  
+
   // Usar el dominio permitido en producción, o el origin en desarrollo
-  const baseUrl = process.env.NODE_ENV === "production" 
-    ? allowedDomain 
-    : origin;
+  const baseUrl = process.env.NODE_ENV === "production" ? allowedDomain : origin;
 
   if (error) {
     return NextResponse.redirect(`${baseUrl}/?error=${encodeURIComponent(error)}`);
   }
-
   if (!code) {
     return NextResponse.redirect(`${baseUrl}/?error=No se recibió el código de autorización`);
   }
@@ -35,10 +32,8 @@ export async function GET(req: NextRequest) {
       `&client_secret=${APP_SECRET}` +
       `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
       `&code=${code}`;
-
     const tokenRes = await fetch(tokenUrl);
     const tokenData = await tokenRes.json();
-
     if (tokenData.error) {
       throw new Error(tokenData.error.message || "Error al obtener el token");
     }
@@ -50,10 +45,8 @@ export async function GET(req: NextRequest) {
       `&client_id=${APP_ID}` +
       `&client_secret=${APP_SECRET}` +
       `&fb_exchange_token=${tokenData.access_token}`;
-
     const longRes = await fetch(longUrl);
     const longData = await longRes.json();
-
     const finalToken = longData.access_token || tokenData.access_token;
 
     // 3) Manda el token de vuelta al navegador en el fragmento (#) de la URL,
