@@ -12,6 +12,7 @@ import {
 import Dashboard from "../components/Dashboard";
 import FileDropzone from "../components/FileDropzone";
 import PreviewModal from "../components/PreviewModal";
+import AccesoGate from "../components/AccesoGate";
 
 interface Resultado {
   pagina: string;
@@ -244,6 +245,7 @@ export default function Home() {
   const nombresSeleccionados = paginas.filter((p) => seleccionadas.has(p.id)).map((p) => p.name);
 
   return (
+    <AccesoGate token={token}>
     <div
       style={{
         minHeight: "100vh",
@@ -927,5 +929,6 @@ export default function Home() {
         theme={theme}
       />
     </div>
+    </AccesoGate>
   );
 }
