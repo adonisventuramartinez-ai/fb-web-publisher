@@ -30,8 +30,6 @@ export default function AdminPage() {
   }
 
   useEffect(() => {
-    // Si ya hay cookie de sesión válida, la primera llamada a /api/admin/solicitudes
-    // funcionará directo sin pedir password de nuevo.
     fetch("/api/admin/solicitudes").then((res) => {
       if (res.ok) {
         setAutenticado(true);
@@ -125,7 +123,7 @@ export default function AdminPage() {
       <div style={{ maxWidth: "800px", margin: "0 auto" }}>
         <h1 style={{ fontSize: "22px", marginBottom: "16px" }}>👥 Solicitudes de acceso</h1>
 
-        <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+        <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
           {(["pendiente", "aprobado", "rechazado", "todas"] as const).map((f) => (
             <button
               key={f}
