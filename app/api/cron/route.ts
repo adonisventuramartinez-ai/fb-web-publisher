@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, BUCKET } from "../../../lib/db";
 import { desencriptar } from "../../../lib/crypto";
 
+// Sin esto, Next.js 14 puede cachear esta ruta GET como estática en el
+// build, y entonces cron-job.org recibiría siempre la misma respuesta
+// "congelada" en vez de ejecutar la consulta real cada vez.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET(req: NextRequest) {
   console.log("=== CRON INICIADO (sin verificación) ===");
   
