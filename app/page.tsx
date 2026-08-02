@@ -13,6 +13,7 @@ import Dashboard from "../components/Dashboard";
 import FileDropzone from "../components/FileDropzone";
 import PreviewModal from "../components/PreviewModal";
 import AccesoGate from "../components/AccesoGate";
+import CuentasManager from "../components/CuentasManager";
 
 interface Resultado {
   pagina: string;
@@ -68,14 +69,13 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [cargandoPaginas, setCargandoPaginas] = useState(false);
   const [historial, setHistorial] = useState<PublicacionHistorial[]>([]);
-  const [tabActivo, setTabActivo] = useState<"publicar" | "historial" | "dashboard">("publicar");
+  const [tabActivo, setTabActivo] = useState<"publicar" | "historial" | "dashboard" | "cuentas">("publicar");
   const [modoOscuro, setModoOscuro] = useState(false);
   const [previewAbierto, setPreviewAbierto] = useState(false);
 
   const theme = modoOscuro ? THEME_DARK : THEME_LIGHT;
 
   useEffect(() => {
-    // Tema: primero localStorage, si no hay preferencia usa la del sistema
     const guardado = localStorage.getItem("modo_oscuro");
     if (guardado !== null) {
       setModoOscuro(guardado === "true");
@@ -425,7 +425,7 @@ export default function Home() {
                   overflowX: "auto",
                 }}
               >
-                {(["publicar", "historial", "dashboard"] as const).map((t) => (
+                {(["publicar", "historial", "dashboard", "cuentas"] as const).map((t) => (
                   <button
                     key={t}
                     onClick={() => setTabActivo(t)}
@@ -443,12 +443,15 @@ export default function Home() {
                     {t === "publicar" && "✏️ Publicar"}
                     {t === "historial" && `📜 Historial (${historial.length})`}
                     {t === "dashboard" && "📊 Dashboard"}
+                    {t === "cuentas" && "👥 Cuentas"}
                   </button>
                 ))}
               </div>
 
               {tabActivo === "dashboard" ? (
                 <Dashboard historial={historial} theme={theme} />
+              ) : tabActivo === "cuentas" ? (
+                <CuentasManager tokenActual={token} theme={theme} />
               ) : tabActivo === "historial" ? (
                 <div>
                   <div
