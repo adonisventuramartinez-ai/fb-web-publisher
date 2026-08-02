@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin, BUCKET } from "../../lib/db";
-import { desencriptar } from "../../lib/crypto";
+import { supabaseAdmin, BUCKET } from "../../../lib/db";
+import { desencriptar } from "../../../lib/crypto";
 
 export async function GET(req: NextRequest) {
   console.log("=== CRON INICIADO (sin verificación) ===");
