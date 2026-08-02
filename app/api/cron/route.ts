@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin, BUCKET } from "../../../lib/db";
-import { desencriptar } from "../../../lib/crypto";
+import { supabaseAdmin, BUCKET } from "../../lib/db";
+import { desencriptar } from "../../lib/crypto";
 
 export async function GET(req: NextRequest) {
-  // La verificación de autorización ha sido eliminada
   console.log("=== CRON INICIADO (sin verificación) ===");
   
   const ahora = new Date();
@@ -125,4 +124,3 @@ export async function GET(req: NextRequest) {
     }, { status: 500 });
   }
 }
-Fix: Agregar imports faltantes en cron
