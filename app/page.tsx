@@ -14,6 +14,7 @@ import FileDropzone from "../components/FileDropzone";
 import PreviewModal from "../components/PreviewModal";
 import AccesoGate from "../components/AccesoGate";
 import CuentasManager from "../components/CuentasManager";
+import Programador from "../components/Programador";
 
 interface Resultado {
   pagina: string;
@@ -69,7 +70,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [cargandoPaginas, setCargandoPaginas] = useState(false);
   const [historial, setHistorial] = useState<PublicacionHistorial[]>([]);
-  const [tabActivo, setTabActivo] = useState<"publicar" | "historial" | "dashboard" | "cuentas">("publicar");
+  const [tabActivo, setTabActivo] = useState<"publicar" | "historial" | "dashboard" | "cuentas" | "programadas">("publicar");
   const [modoOscuro, setModoOscuro] = useState(false);
   const [previewAbierto, setPreviewAbierto] = useState(false);
 
@@ -425,7 +426,7 @@ export default function Home() {
                   overflowX: "auto",
                 }}
               >
-                {(["publicar", "historial", "dashboard", "cuentas"] as const).map((t) => (
+                {(["publicar", "historial", "dashboard", "cuentas", "programadas"] as const).map((t) => (
                   <button
                     key={t}
                     onClick={() => setTabActivo(t)}
@@ -444,6 +445,7 @@ export default function Home() {
                     {t === "historial" && `📜 Historial (${historial.length})`}
                     {t === "dashboard" && "📊 Dashboard"}
                     {t === "cuentas" && "👥 Cuentas"}
+                    {t === "programadas" && "🗓️ Programadas"}
                   </button>
                 ))}
               </div>
@@ -452,6 +454,8 @@ export default function Home() {
                 <Dashboard historial={historial} theme={theme} />
               ) : tabActivo === "cuentas" ? (
                 <CuentasManager tokenActual={token} theme={theme} />
+              ) : tabActivo === "programadas" ? (
+                <Programador theme={theme} />
               ) : tabActivo === "historial" ? (
                 <div>
                   <div
