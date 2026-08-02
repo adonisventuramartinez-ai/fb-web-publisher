@@ -123,7 +123,7 @@ export default function AdminPage() {
       <div style={{ maxWidth: "800px", margin: "0 auto" }}>
         <h1 style={{ fontSize: "22px", marginBottom: "16px" }}>👥 Solicitudes de acceso</h1>
 
-        <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
           {(["pendiente", "aprobado", "rechazado", "todas"] as const).map((f) => (
             <button
               key={f}
