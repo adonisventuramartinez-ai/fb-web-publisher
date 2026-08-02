@@ -2,54 +2,48 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, BUCKET } from "../../../lib/db";
 import { desencriptar } from "../../../lib/crypto";
 
-// ============================================================
-// 1. VERIFICACIÓN DE SEGURIDAD (CRON_SECRET)
-// ============================================================
-
 export async function GET(req: NextRequest) {
-  // 🔒 Verificar que la petición viene de Vercel Cron
+  // 🔒 Verificar autorización
   const authHeader = req.headers.get("authorization");
   const secret = process.env.CRON_SECRET;
   
-  if (secret) {
-    if (authHeader !== `Bearer ${secret}`) {
-      console.error("❌ Intento no autorizado al cron");
-      return NextResponse.json({ 
-        error: "No autorizado - Token inválido" 
-      }, { status: 401 });
-    }
-    console.log("✅ Autorización exitosa");
-  } else {
-    console.warn("⚠️ CRON_SECRET no configurado - El cron está EXPUESTO");
+  if (secret && authHeader !== `Bearer ${secret}`) {
+    console.error("❌ Intento no autorizado al cron");
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
   // ============================================================
-  // 2. CONFIGURACIÓN DE ZONA HORARIA (REPÚBLICA DOMINICANA UTC-4)
+  // OBTENER HORA ACTUAL (UTC)
   // ============================================================
   
-  // Obtener la hora actual en República Dominicana (UTC-4)
-  const ahoraRD = new Date();
-  // Restar 4 horas para ajustar a UTC-4 (República Dominicana)
+  const ahora = new Date();
+  const ahoraUTC = ahora.toISOString();
+  
+  // Hora en República Dominicana (UTC-4)
+  const ahoraRD = new Date(ahora.getTime());
   ahoraRD.setHours(ahoraRD.getHours() - 4);
+  const ahoraRDStr = ahoraRD.toISOString();
   
-  console.log(`🕐 Hora actual en RD: ${ahoraRD.toLocaleString('es-DO', { timeZone: 'America/Santo_Domingo' })}`);
-  console.log(`🕐 Hora actual en UTC: ${new Date().toISOString()}`);
+  console.log(`═══════════════════════════════════════════════`);
+  console.log(`🕐 CRON EJECUTADO: ${new Date().toLocaleString('es-DO', { timeZone: 'America/Santo_Domingo' })}`);
+  console.log(`🕐 Hora UTC: ${ahoraUTC}`);
+  console.log(`🕐 Hora RD (UTC-4): ${ahoraRDStr}`);
+  console.log(`═══════════════════════════════════════════════`);
 
-  // ============================================================
-  // 3. OBTENER PUBLICACIONES PENDIENTES
-  // ============================================================
-  
   const resultados = [];
 
   try {
-    console.log(`🔍 Buscando publicaciones pendientes para ejecutar (hora RD: ${ahoraRD.toISOString()})...`);
-
-    // Obtener posts con fecha_programada <= hora actual en RD
+    // ============================================================
+    // BUSCAR PUBLICACIONES PENDIENTES (COMPARACIÓN DIRECTA UTC)
+    // ============================================================
+    
+    console.log(`🔍 Buscando posts con fecha_programada <= ${ahoraUTC}`);
+    
     const { data: posts, error } = await supabaseAdmin
       .from("posts_programados")
       .select("*")
       .eq("estado", "pendiente")
-      .lte("fecha_programada", ahoraRD.toISOString())
+      .lte("fecha_programada", ahoraUTC)
       .order("fecha_programada", { ascending: true });
 
     if (error) {
@@ -58,43 +52,56 @@ export async function GET(req: NextRequest) {
     }
 
     console.log(`📋 Encontrados ${posts?.length || 0} posts para procesar`);
+    
+    // Mostrar los posts encontrados
+    if (posts && posts.length > 0) {
+      posts.forEach((p, i) => {
+        console.log(`  ${i+1}. ID:${p.id} | Título: ${p.titulo || 'sin título'} | Programado: ${p.fecha_programada}`);
+      });
+    }
 
     if (!posts || posts.length === 0) {
       return NextResponse.json({ 
         mensaje: "No hay publicaciones pendientes", 
         procesados: 0,
-        hora_rd: ahoraRD.toISOString()
+        hora_utc: ahoraUTC,
+        hora_rd: ahoraRDStr
       });
     }
 
     // ============================================================
-    // 4. PROCESAR CADA PUBLICACIÓN
+    // PROCESAR CADA PUBLICACIÓN
     // ============================================================
 
     for (const post of posts) {
-      console.log(`🔄 Procesando post ${post.id} (${post.titulo || "sin título"})...`);
+      console.log(`\n🔄 PROCESANDO POST ID: ${post.id}`);
+      console.log(`   Título: ${post.titulo || "sin título"}`);
+      console.log(`   Programado para: ${post.fecha_programada}`);
+      console.log(`   Hora actual UTC: ${ahoraUTC}`);
       
       try {
-        // 4.1 Marcar como "publicando"
+        // Marcar como "publicando"
         await supabaseAdmin
           .from("posts_programados")
           .update({ estado: "publicando" })
           .eq("id", post.id);
+        console.log(`   ✅ Estado cambiado a "publicando"`);
 
-        // 4.2 Descargar archivo de Supabase Storage
-        console.log(`📥 Descargando archivo: ${post.archivo_url}`);
+        // Descargar archivo
+        console.log(`   📥 Descargando archivo: ${post.archivo_url}`);
         const { data: fileData, error: downloadError } = await supabaseAdmin.storage
           .from(BUCKET)
           .download(post.archivo_url);
         
         if (downloadError) {
-          console.error(`❌ Error al descargar archivo:`, downloadError);
+          console.error(`   ❌ Error al descargar:`, downloadError);
           throw new Error(`Error al descargar archivo: ${downloadError.message}`);
         }
+        console.log(`   ✅ Archivo descargado (${fileData.size} bytes)`);
 
-        // 4.3 Publicar en cada página
+        // Publicar en cada página
         for (const pagina of post.paginas) {
-          console.log(`📤 Publicando en página: ${pagina.name} (${pagina.id})`);
+          console.log(`   📤 Publicando en página: ${pagina.name} (${pagina.id})`);
           
           try {
             const token = desencriptar(pagina.access_token_encriptado);
@@ -117,27 +124,24 @@ export async function GET(req: NextRequest) {
               form.append("source", fileData, post.archivo_nombre || "video.mp4");
             }
 
-            const fbRes = await fetch(endpoint, { 
-              method: "POST", 
-              body: form 
-            });
-            
+            console.log(`   📡 Enviando a Facebook...`);
+            const fbRes = await fetch(endpoint, { method: "POST", body: form });
             const fbData = await fbRes.json();
             
             if (fbData.error) {
-              console.error(`❌ Error de Facebook en ${pagina.name}:`, fbData.error);
+              console.error(`   ❌ Error de Facebook:`, fbData.error);
               throw new Error(fbData.error.message || "Error al publicar en Facebook");
             }
             
-            console.log(`✅ Publicado en ${pagina.name}: ${fbData.id || fbData.post_id}`);
+            console.log(`   ✅ Publicado en ${pagina.name}: ${fbData.id || fbData.post_id}`);
             
           } catch (err: any) {
-            console.error(`❌ Error al publicar en ${pagina.name}:`, err.message);
+            console.error(`   ❌ Error en ${pagina.name}:`, err.message);
             throw new Error(`Error en ${pagina.name}: ${err.message}`);
           }
         }
 
-        // 4.4 Marcar como completado
+        // Marcar como completado
         await supabaseAdmin
           .from("posts_programados")
           .update({ 
@@ -152,14 +156,13 @@ export async function GET(req: NextRequest) {
           titulo: post.titulo || "sin título"
         });
         
-        console.log(`✅ Post ${post.id} completado exitosamente`);
+        console.log(`   ✅ POST ${post.id} COMPLETADO EXITOSAMENTE`);
 
       } catch (err: any) {
-        // 4.5 Si falló, aumentar intentos
         const nuevosIntentos = (post.intentos || 0) + 1;
         const nuevoEstado = nuevosIntentos >= 3 ? "error" : "pendiente";
         
-        console.error(`❌ Post ${post.id} falló (intento ${nuevosIntentos}/3):`, err.message);
+        console.error(`   ❌ POST ${post.id} FALLÓ (intento ${nuevosIntentos}/3):`, err.message);
         
         await supabaseAdmin
           .from("posts_programados")
@@ -178,17 +181,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // ============================================================
-    // 5. RESPUESTA FINAL
-    // ============================================================
-    
-    console.log(`✅ Procesamiento completado. ${resultados.length} posts procesados`);
-    
+    console.log(`\n═══════════════════════════════════════════════`);
+    console.log(`✅ PROCESAMIENTO COMPLETADO: ${resultados.length} posts`);
+    console.log(`═══════════════════════════════════════════════`);
+
     return NextResponse.json({ 
       procesados: resultados.length,
       resultados,
-      hora_rd: ahoraRD.toISOString(),
-      timestamp: new Date().toISOString()
+      hora_utc: ahoraUTC,
+      hora_rd: ahoraRDStr
     });
 
   } catch (err: any) {
