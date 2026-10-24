@@ -146,11 +146,20 @@ export default function Home() {
   }
 
   function cerrarSesion() {
+    fetch("/api/auth/session", { method: "DELETE" }).catch(() => {});
     localStorage.removeItem("fb_token");
     setToken(null);
     setPaginas([]);
     setSeleccionadas(new Set());
     toast.success("Sesión cerrada");
+  }
+
+  // Facebook dijo que el token guardado ya no sirve: se descarta en silencio
+  function descartarTokenInvalido() {
+    localStorage.removeItem("fb_token");
+    setToken(null);
+    setPaginas([]);
+    setSeleccionadas(new Set());
   }
 
   function limpiarHistorial() {
@@ -246,7 +255,7 @@ export default function Home() {
   const nombresSeleccionados = paginas.filter((p) => seleccionadas.has(p.id)).map((p) => p.name);
 
   return (
-    <AccesoGate token={token}>
+    <AccesoGate token={token} onTokenInvalido={descartarTokenInvalido}>
     <div
       style={{
         minHeight: "100vh",

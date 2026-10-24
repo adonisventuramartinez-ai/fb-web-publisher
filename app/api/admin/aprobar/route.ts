@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../../lib/db";
-import { esAdminValido } from "../../../../lib/adminAuth";
+import { adminDe, noAutorizado } from "../../../../lib/auth";
 
 export async function POST(req: NextRequest) {
-  if (!esAdminValido(req)) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
+  if (!(await adminDe(req))) return noAutorizado();
 
   const { fb_id, accion } = await req.json();
   if (!fb_id || !["aprobar", "rechazar"].includes(accion)) {

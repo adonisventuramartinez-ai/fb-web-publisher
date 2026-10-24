@@ -1,44 +1,55 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../lib/db";
 import { encriptar } from "../../../lib/crypto";
+import { GRAPH_BASE } from "../../../lib/graph";
+import { noAutorizado, sesionDe } from "../../../lib/auth";
 
-// POST: guarda una cuenta nueva (recibe el token de usuario ya obtenido por OAuth
-// en el navegador, lo valida contra Facebook, lo encripta y lo guarda).
+export const dynamic = "force-dynamic";
+
+// POST: guarda una cuenta nueva (token de usuario obtenido por OAuth en el
+// navegador). Se valida contra Facebook, se encripta y queda ligada al dueño.
 export async function POST(req: NextRequest) {
+  const sesion = await sesionDe(req);
+  if (!sesion) return noAutorizado();
+
   try {
     const { nombre, userToken } = await req.json();
-    if (!nombre || !userToken) {
+    if (!nombre || !userToken || typeof nombre !== "string" || nombre.length > 80) {
       return NextResponse.json({ error: "Faltan datos (nombre, userToken)" }, { status: 400 });
     }
 
-    // Validar que el token realmente funciona antes de guardarlo
-    const check = await fetch(`https://graph.facebook.com/v19.0/me?access_token=${userToken}`);
+    const check = await fetch(`${GRAPH_BASE}/me?access_token=${encodeURIComponent(userToken)}`);
     const checkData = await check.json();
     if (checkData.error) {
       return NextResponse.json({ error: "Token de Facebook inválido: " + checkData.error.message }, { status: 400 });
     }
 
-    const tokenEncriptado = encriptar(userToken);
-
     const { data, error } = await supabaseAdmin
       .from("cuentas_fb")
-      .insert({ nombre, token_encriptado: tokenEncriptado })
+      .insert({
+        nombre: nombre.trim(),
+        token_encriptado: encriptar(userToken),
+        propietario_fb_id: sesion.sub,
+      })
       .select("id, nombre, creado_en")
       .single();
 
     if (error) throw error;
-
     return NextResponse.json({ cuenta: data });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Error al guardar la cuenta" }, { status: 500 });
   }
 }
 
-// GET: lista las cuentas guardadas (sin exponer los tokens)
-export async function GET() {
+// GET: cuentas del usuario (nunca expone tokens)
+export async function GET(req: NextRequest) {
+  const sesion = await sesionDe(req);
+  if (!sesion) return noAutorizado();
+
   const { data, error } = await supabaseAdmin
     .from("cuentas_fb")
     .select("id, nombre, creado_en")
+    .eq("propietario_fb_id", sesion.sub)
     .order("creado_en", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

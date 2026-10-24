@@ -1,36 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import { COOKIE_ADMIN, firmarSesion } from "../../../../lib/session";
+import { opcionesCookie } from "../../../../lib/auth";
 
-// Contraseña de admin vive SOLO en variable de entorno (ADMIN_PASSWORD).
-// La cookie que se emite no guarda la contraseña, sino un hash firmado
-// con ENCRYPTION_KEY, para no tener que guardar sesiones en la base de datos.
-function firmar(valor: string): string {
-  const key = process.env.ENCRYPTION_KEY || "";
-  return crypto.createHmac("sha256", key).update(valor).digest("hex");
+// ADMIN_PASSWORD vive SOLO en variable de entorno. La cookie lleva una sesión
+// firmada con expiración dentro de la firma (8 h), no la contraseña.
+function iguales(a: string, b: string): boolean {
+  const ha = crypto.createHash("sha256").update(a).digest();
+  const hb = crypto.createHash("sha256").update(b).digest();
+  return crypto.timingSafeEqual(ha, hb);
 }
 
 export async function POST(req: NextRequest) {
-  const { password } = await req.json();
+  const { password } = await req.json().catch(() => ({ password: "" }));
 
   if (!process.env.ADMIN_PASSWORD) {
     return NextResponse.json({ error: "ADMIN_PASSWORD no está configurada en el servidor" }, { status: 500 });
   }
 
-  if (password !== process.env.ADMIN_PASSWORD) {
+  if (typeof password !== "string" || !iguales(password, process.env.ADMIN_PASSWORD)) {
+    await new Promise((r) => setTimeout(r, 800)); // frena la fuerza bruta
     return NextResponse.json({ error: "Contraseña incorrecta" }, { status: 401 });
   }
 
-  const valor = "admin_ok";
-  const firma = firmar(valor);
-  const cookieValue = `${valor}.${firma}`;
-
+  const valor = await firmarSesion({ sub: "admin", nombre: "Administrador", rol: "admin" }, 8 * 3600);
   const res = NextResponse.json({ ok: true });
-  res.cookies.set("admin_session", cookieValue, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    maxAge: 60 * 60 * 8, // 8 horas
-    path: "/",
-  });
+  res.cookies.set(COOKIE_ADMIN, valor, opcionesCookie(8 * 3600));
+  return res;
+}
+
+export async function DELETE() {
+  const res = NextResponse.json({ ok: true });
+  res.cookies.set(COOKIE_ADMIN, "", opcionesCookie(0));
   return res;
 }

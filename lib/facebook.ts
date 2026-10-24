@@ -1,8 +1,8 @@
-// Todas estas funciones corren en el NAVEGADOR (no en Vercel), así que las
-// fotos/videos van directo del cliente a Facebook, sin pasar por el límite
-// de tamaño de las funciones serverless.
+// Estas funciones corren en el NAVEGADOR: las fotos/videos de "Publicar ahora"
+// van directo del cliente a Facebook, sin pasar por el límite de tamaño de las
+// funciones serverless.
 
-const GRAPH_BASE = "https://graph.facebook.com/v19.0";
+import { GRAPH_BASE, GRAPH_DIALOG, appUrl } from "./graph";
 
 export interface FacebookPage {
   id: string;
@@ -18,8 +18,7 @@ export interface ValidacionArchivo {
   error?: string;
 }
 
-// Límites orientativos de la Graph API (evitan que el usuario intente subir
-// algo que va a fallar del lado de Facebook).
+// Límites orientativos de la Graph API (evitan intentar algo que va a fallar).
 const LIMITES: Record<TipoContenido, { maxBytes: number; tipos: string[] }> = {
   foto: { maxBytes: 10 * 1024 * 1024, tipos: ["image/jpeg", "image/png", "image/gif", "image/webp"] },
   video: { maxBytes: 1024 * 1024 * 1024 * 4, tipos: ["video/mp4", "video/quicktime", "video/x-msvideo"] },
@@ -33,10 +32,7 @@ export function validarArchivo(archivo: File, tipo: TipoContenido): ValidacionAr
     (t) => archivo.type === t || archivo.type.startsWith(t.split("/")[0] + "/")
   );
   if (!tipoValido) {
-    return {
-      valido: false,
-      error: `Formato no soportado para ${tipo}. Usa: ${limite.tipos.join(", ")}`,
-    };
+    return { valido: false, error: `Formato no soportado para ${tipo}. Usa: ${limite.tipos.join(", ")}` };
   }
 
   if (archivo.size > limite.maxBytes) {
@@ -50,24 +46,26 @@ export function validarArchivo(archivo: File, tipo: TipoContenido): ValidacionAr
   return { valido: true };
 }
 
+function estadoAleatorio(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export function getLoginUrl(): string {
   const appId = process.env.NEXT_PUBLIC_FB_APP_ID;
-  const baseUrl =
-    process.env.NODE_ENV === "production"
-      ? "https://fb-web-publisher.vercel.app"
-      : typeof window !== "undefined"
-      ? window.location.origin
-      : "";
-  const redirectUri = `${baseUrl}/api/auth/callback`;
+  const redirectUri = `${appUrl(typeof window !== "undefined" ? window.location.origin : "")}/api/auth/callback`;
   const scopes = "pages_manage_posts,pages_read_engagement,pages_show_list,pages_read_user_content";
-  const state = Math.random().toString(36).slice(2);
+  const state = estadoAleatorio();
 
-  if (typeof window !== "undefined") {
-    sessionStorage.setItem("fb_oauth_state", state);
+  // El servidor compara este state con el que vuelve de Facebook (anti-CSRF)
+  if (typeof document !== "undefined") {
+    const secure = location.protocol === "https:" ? "; Secure" : "";
+    document.cookie = `fb_oauth_state=${state}; Max-Age=600; Path=/; SameSite=Lax${secure}`;
   }
 
   return (
-    `https://www.facebook.com/v19.0/dialog/oauth` +
+    `${GRAPH_DIALOG}` +
     `?client_id=${appId}` +
     `&redirect_uri=${encodeURIComponent(redirectUri)}` +
     `&scope=${encodeURIComponent(scopes)}` +
@@ -86,8 +84,8 @@ export async function obtenerPaginas(userToken: string): Promise<FacebookPage[]>
 
 /**
  * Publica contenido en una página, reportando progreso de subida (0-100).
- * Usa XMLHttpRequest en vez de fetch porque fetch no expone progreso de "upload"
- * de forma estándar en todos los navegadores.
+ * Usa XMLHttpRequest porque fetch no expone progreso de "upload" de forma
+ * estándar en todos los navegadores.
  */
 export function publicarContenido(
   pagina: FacebookPage,
@@ -137,10 +135,7 @@ export function publicarContenido(
       }
     };
 
-    xhr.onerror = () => {
-      resolve({ success: false, message: "Error de red al subir el archivo" });
-    };
-
+    xhr.onerror = () => resolve({ success: false, message: "Error de red al subir el archivo" });
     xhr.send(form);
   });
 }

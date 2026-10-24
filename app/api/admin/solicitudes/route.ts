@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../../lib/db";
-import { esAdminValido } from "../../../../lib/adminAuth";
+import { adminDe, noAutorizado } from "../../../../lib/auth";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  if (!esAdminValido(req)) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
+  if (!(await adminDe(req))) return noAutorizado();
 
   const { data, error } = await supabaseAdmin
     .from("usuarios_autorizados")

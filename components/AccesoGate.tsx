@@ -1,67 +1,77 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type EstadoAcceso = "cargando" | "pendiente" | "aprobado" | "rechazado" | "sin_login";
 
 interface AccesoGateProps {
   token: string | null;
+  // Se llama si Facebook dice que el token guardado ya no sirve
+  onTokenInvalido?: () => void;
   children: React.ReactNode;
 }
 
-export default function AccesoGate({ token, children }: AccesoGateProps) {
+export default function AccesoGate({ token, onTokenInvalido, children }: AccesoGateProps) {
   const [estado, setEstado] = useState<EstadoAcceso>("cargando");
   const [codigo, setCodigo] = useState<string | null>(null);
   const [nombre, setNombre] = useState<string>("");
+  const intervaloRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
+    let cancelado = false;
+
+    async function verificar(t: string, primera: boolean) {
+      try {
+        // El servidor valida el token con Facebook y, si el usuario está aprobado, pone la cookie de sesión
+        const res = await fetch("/api/auth/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: t }),
+        });
+        const data = await res.json();
+        if (cancelado) return;
+
+        if (res.status === 401 || data.estado === "sin_login") {
+          setEstado("sin_login");
+          if (primera) onTokenInvalido?.();
+          return;
+        }
+        if (data.nombre) setNombre(data.nombre);
+        setCodigo(data.codigo_solicitud ?? null);
+        setEstado(data.estado);
+
+        if (data.estado === "pendiente" && !intervaloRef.current) {
+          // Mientras esté pendiente, consulta cada 10 s por si el admin ya lo aprobó
+          intervaloRef.current = setInterval(() => verificar(t, false), 10000);
+        }
+        if (data.estado !== "pendiente" && intervaloRef.current) {
+          clearInterval(intervaloRef.current);
+          intervaloRef.current = null;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
     if (!token) {
       setEstado("sin_login");
-      return;
+    } else {
+      setEstado("cargando");
+      verificar(token, true);
     }
-    registrarYVerificar(token);
+
+    return () => {
+      cancelado = true;
+      if (intervaloRef.current) {
+        clearInterval(intervaloRef.current);
+        intervaloRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  async function registrarYVerificar(t: string) {
-    try {
-      // 1) Obtener id y nombre de Facebook del usuario logueado
-      const meRes = await fetch(`https://graph.facebook.com/v19.0/me?access_token=${t}&fields=id,name`);
-      const me = await meRes.json();
-      if (me.error) {
-        setEstado("sin_login");
-        return;
-      }
-      setNombre(me.name);
-
-      // 2) Registrar (o recuperar) la solicitud de acceso
-      const solicitudRes = await fetch("/api/acceso/solicitar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fb_id: me.id, nombre: me.name }),
-      });
-      const solicitud = await solicitudRes.json();
-      setCodigo(solicitud.codigo_solicitud);
-      setEstado(solicitud.estado);
-
-      // 3) Si sigue pendiente, consultar cada 10s por si el admin ya lo aprobó
-      if (solicitud.estado === "pendiente") {
-        const intervalo = setInterval(async () => {
-          const check = await fetch(`/api/acceso/estado?fb_id=${me.id}`);
-          const data = await check.json();
-          if (data.estado && data.estado !== "pendiente") {
-            setEstado(data.estado);
-            clearInterval(intervalo);
-          }
-        }, 10000);
-        return () => clearInterval(intervalo);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  }
-
   if (estado === "sin_login") {
-    return <>{children}</>; // deja pasar a la pantalla normal de "Conectar con Facebook"
+    return <>{children}</>; // deja pasar a la pantalla de "Conectar con Facebook"
   }
 
   if (estado === "cargando") {

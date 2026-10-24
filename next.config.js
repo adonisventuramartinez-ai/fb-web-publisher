@@ -1,18 +1,23 @@
 /** @type {import('next').NextConfig} */
+// IMPORTANTE: ya NO se inyectan FB_APP_SECRET ni otras variables con `env:`.
+// Next.js lee las variables de Vercel en el servidor por sí solo, y solo las
+// que empiezan con NEXT_PUBLIC_ llegan al navegador.
 const nextConfig = {
-  env: {
-    FB_APP_ID: process.env.FB_APP_ID,
-    FB_APP_SECRET: process.env.FB_APP_SECRET,
-    NEXT_PUBLIC_FB_APP_ID: process.env.NEXT_PUBLIC_FB_APP_ID,
+  poweredByHeader: false,
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+        ],
+      },
+    ];
   },
-  // Configuración para leer archivos .env en producción
-  serverRuntimeConfig: {
-    // Will only be available on the server side
-  },
-  publicRuntimeConfig: {
-    // Will be available on both server and client
-    NEXT_PUBLIC_FB_APP_ID: process.env.NEXT_PUBLIC_FB_APP_ID,
-  },
-}
+};
 
-module.exports = nextConfig
+module.exports = nextConfig;

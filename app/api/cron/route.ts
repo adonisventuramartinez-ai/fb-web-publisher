@@ -1,132 +1,198 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin, BUCKET } from "../../../lib/db";
+import crypto from "crypto";
+import { supabaseAdmin, BUCKET, PostProgramado, ResultadoPagina } from "../../../lib/db";
 import { desencriptar } from "../../../lib/crypto";
+import { publicarEnPagina } from "../../../lib/fbServer";
+import { decidir, siguienteOcurrencia } from "../../../lib/planificador";
 
-// Sin esto, Next.js 14 puede cachear esta ruta GET como estática en el
-// build, y entonces cron-job.org recibiría siempre la misma respuesta
-// "congelada" en vez de ejecutar la consulta real cada vez.
+// Sin esto Next.js puede cachear el GET como estático y el cron recibiría
+// siempre la misma respuesta congelada.
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 60;
+
+const PRESUPUESTO_MS = 45_000; // dejamos margen antes del límite de la función
+const POSTS_POR_EJECUCION = 10;
+const MINUTOS_PARA_RESCATAR = 10; // un "publicando" más viejo que esto se considera atascado
+
+function secretoValido(req: NextRequest): boolean {
+  const esperado = process.env.CRON_SECRET;
+  if (!esperado) return false; // sin CRON_SECRET configurado la ruta queda cerrada
+  const recibido = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+  const a = crypto.createHash("sha256").update(recibido).digest();
+  const b = crypto.createHash("sha256").update(esperado).digest();
+  return crypto.timingSafeEqual(a, b);
+}
 
 export async function GET(req: NextRequest) {
-  console.log("=== CRON INICIADO (sin verificación) ===");
-  
-  const ahora = new Date();
-  const ahoraUTC = ahora.toISOString();
-  console.log(`🕐 Hora actual UTC: ${ahoraUTC}`);
+  if (!process.env.CRON_SECRET) {
+    return NextResponse.json({ error: "CRON_SECRET no está configurado en el servidor" }, { status: 500 });
+  }
+  if (!secretoValido(req)) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
 
-  const resultados = [];
+  const inicio = Date.now();
+  const ahoraISO = new Date(inicio).toISOString();
+  const salida: any[] = [];
 
   try {
+    // 1) Rescatar posts atascados en "publicando" (la función murió a mitad)
+    const limite = new Date(inicio - MINUTOS_PARA_RESCATAR * 60_000).toISOString();
+    const { data: rescatados } = await supabaseAdmin
+      .from("posts_programados")
+      .update({ estado: "pendiente", bloqueado_en: null })
+      .eq("estado", "publicando")
+      .lt("bloqueado_en", limite)
+      .select("id");
+
+    // 2) Buscar vencidos
     const { data: posts, error } = await supabaseAdmin
       .from("posts_programados")
       .select("*")
       .eq("estado", "pendiente")
-      .lte("fecha_programada", ahoraUTC)
-      .order("fecha_programada", { ascending: true });
+      .lte("fecha_programada", ahoraISO)
+      .order("fecha_programada", { ascending: true })
+      .limit(POSTS_POR_EJECUCION);
+    if (error) throw error;
 
-    if (error) {
-      console.error("❌ Error al obtener posts:", error);
-      throw error;
+    for (const candidato of (posts || []) as PostProgramado[]) {
+      if (Date.now() - inicio > PRESUPUESTO_MS) break; // el resto se procesa en la próxima corrida
+
+      // 3) Reclamo atómico: solo UNA ejecución consigue pasar de pendiente → publicando
+      const { data: reclamado } = await supabaseAdmin
+        .from("posts_programados")
+        .update({ estado: "publicando", bloqueado_en: new Date().toISOString() })
+        .eq("id", candidato.id)
+        .eq("estado", "pendiente")
+        .select("*");
+      if (!reclamado?.length) continue; // otra ejecución se lo llevó
+      const post = reclamado[0] as PostProgramado;
+
+      salida.push(await procesar(post));
     }
 
-    console.log(`📋 Encontrados ${posts?.length || 0} posts para procesar`);
+    return NextResponse.json({
+      ok: true,
+      procesados: salida.length,
+      rescatados: rescatados?.length ?? 0,
+      ms: Date.now() - inicio,
+      resultados: salida,
+    });
+  } catch (err: any) {
+    console.error("[cron] error general:", err);
+    return NextResponse.json({ error: err.message || "Error interno" }, { status: 500 });
+  }
+}
 
-    if (!posts || posts.length === 0) {
-      return NextResponse.json({ 
-        mensaje: "No hay publicaciones pendientes", 
-        procesados: 0,
-        hora_utc: ahoraUTC
-      });
-    }
+async function procesar(post: PostProgramado) {
+  const resultados: Record<string, ResultadoPagina> = { ...(post.resultados || {}) };
 
-    for (const post of posts) {
-      console.log(`🔄 Procesando post ${post.id} (${post.titulo || "sin título"})`);
-      
-      try {
-        await supabaseAdmin
-          .from("posts_programados")
-          .update({ estado: "publicando" })
-          .eq("id", post.id);
+  try {
+    // URL firmada para que Facebook descargue el archivo él mismo (6 h de vigencia)
+    const { data: firmada, error: errFirma } = await supabaseAdmin.storage
+      .from(BUCKET)
+      .createSignedUrl(post.archivo_url, 6 * 3600);
+    if (errFirma || !firmada?.signedUrl) throw new Error(`No se pudo firmar el archivo: ${errFirma?.message}`);
 
-        const { data: fileData, error: downloadError } = await supabaseAdmin.storage
-          .from(BUCKET)
-          .download(post.archivo_url);
-        
-        if (downloadError) throw new Error(`Error al descargar archivo: ${downloadError.message}`);
+    // Solo las páginas que AÚN no salieron (así un reintento no duplica)
+    const pendientes = post.paginas.filter((p) => !resultados[p.id]?.ok);
 
-        for (const pagina of post.paginas) {
-          const token = desencriptar(pagina.access_token_encriptado);
-          const form = new FormData();
-          form.append("access_token", token);
-          
-          let endpoint = "";
-          const textoCompleto = [post.titulo, post.mensaje].filter(Boolean).join("\n\n");
-          
-          if (post.tipo === "foto") {
-            endpoint = `https://graph.facebook.com/v19.0/${pagina.id}/photos`;
-            form.append("caption", textoCompleto || "Foto publicada");
-            form.append("source", fileData, post.archivo_nombre || "foto.jpg");
-          } else {
-            endpoint = `https://graph.facebook.com/v19.0/${pagina.id}/videos`;
-            form.append("description", textoCompleto || "Video publicado");
-            if (post.titulo) form.append("title", post.titulo);
-            if (post.tipo === "reel") form.append("is_reel", "true");
-            form.append("source", fileData, post.archivo_nombre || "video.mp4");
-          }
-
-          const fbRes = await fetch(endpoint, { method: "POST", body: form });
-          const fbData = await fbRes.json();
-          
-          if (fbData.error) throw new Error(fbData.error.message || "Error al publicar en Facebook");
-          console.log(`✅ Publicado en ${pagina.name}: ${fbData.id || fbData.post_id}`);
+    await Promise.all(
+      pendientes.map(async (pagina) => {
+        let token: string;
+        try {
+          token = desencriptar(pagina.access_token_encriptado);
+        } catch {
+          resultados[pagina.id] = {
+            ok: false,
+            error: "No se pudo desencriptar el token de la página (¿cambió ENCRYPTION_KEY?)",
+            reintentable: false,
+            en: new Date().toISOString(),
+          };
+          return;
         }
-
-        await supabaseAdmin
-          .from("posts_programados")
-          .update({ 
-            estado: "completado",
-            intentos: post.intentos || 0
-          })
-          .eq("id", post.id);
-
-        resultados.push({ 
-          id: post.id, 
-          status: "completado",
-          titulo: post.titulo || "sin título"
+        const r = await publicarEnPagina({
+          paginaId: pagina.id,
+          token,
+          tipo: post.tipo,
+          urlArchivo: firmada.signedUrl,
+          titulo: post.titulo,
+          mensaje: post.mensaje,
         });
-
-      } catch (err: any) {
-        const nuevosIntentos = (post.intentos || 0) + 1;
-        const nuevoEstado = nuevosIntentos >= 3 ? "error" : "pendiente";
-        
-        await supabaseAdmin
-          .from("posts_programados")
-          .update({ 
-            estado: nuevoEstado,
-            intentos: nuevosIntentos
-          })
-          .eq("id", post.id);
-
-        resultados.push({ 
-          id: post.id, 
-          status: nuevoEstado, 
-          error: err.message,
-          intentos: nuevosIntentos 
-        });
+        resultados[pagina.id] = { ...r, en: new Date().toISOString() };
+      })
+    );
+  } catch (e: any) {
+    // Fallo antes de poder publicar en ninguna página (archivo borrado, etc.)
+    for (const p of post.paginas) {
+      if (!resultados[p.id]?.ok) {
+        resultados[p.id] = { ok: false, error: e.message, reintentable: true, en: new Date().toISOString() };
       }
     }
-
-    return NextResponse.json({ 
-      procesados: resultados.length,
-      resultados,
-      hora_utc: ahoraUTC
-    });
-
-  } catch (err: any) {
-    console.error("❌ Error general en cron:", err);
-    return NextResponse.json({ 
-      error: err.message || "Error interno del servidor" 
-    }, { status: 500 });
   }
+
+  const ahora = Date.now();
+  const decision = decidir(
+    post.paginas.map((p) => p.id),
+    resultados,
+    post.intentos || 0,
+    ahora
+  );
+
+  // Si la serie debe continuar, clonamos la siguiente ocurrencia cuando este post
+  // llega a un estado final (completado o error): una falla no corta la serie.
+  if (decision.estado === "completado" || decision.estado === "error") {
+    await programarSiguiente(post, ahora);
+  }
+
+  const cambios: Record<string, unknown> = {
+    estado: decision.estado,
+    intentos: decision.intentos,
+    resultados,
+    ultimo_error: decision.ultimoError,
+    bloqueado_en: null,
+  };
+  if (decision.proximaFecha) cambios.fecha_programada = decision.proximaFecha;
+
+  const { error } = await supabaseAdmin.from("posts_programados").update(cambios).eq("id", post.id);
+  if (error) console.error(`[cron] no se pudo guardar el resultado del post ${post.id}:`, error);
+
+  return {
+    id: post.id,
+    estado: decision.estado,
+    intentos: decision.intentos,
+    ok: Object.values(resultados).filter((r) => r.ok).length,
+    total: post.paginas.length,
+    error: decision.ultimoError,
+  };
+}
+
+async function programarSiguiente(post: PostProgramado, ahoraMs: number) {
+  const proxima = siguienteOcurrencia(post.fecha_programada, post.recurrencia, ahoraMs);
+  if (!proxima) return;
+
+  const serie = post.serie_id ?? post.id;
+  if (!post.serie_id) {
+    await supabaseAdmin.from("posts_programados").update({ serie_id: serie }).eq("id", post.id);
+  }
+
+  const { error } = await supabaseAdmin.from("posts_programados").insert({
+    cuenta_id: post.cuenta_id,
+    propietario_fb_id: post.propietario_fb_id,
+    paginas: post.paginas,
+    tipo: post.tipo,
+    titulo: post.titulo,
+    mensaje: post.mensaje,
+    archivo_url: post.archivo_url,
+    archivo_nombre: post.archivo_nombre,
+    fecha_programada: proxima,
+    recurrencia: post.recurrencia,
+    estado: "pendiente",
+    intentos: 0,
+    resultados: {},
+    serie_id: serie,
+  });
+  // 23505 = el índice único (serie_id, fecha_programada) evitó un duplicado: correcto
+  if (error && error.code !== "23505") console.error(`[cron] no se pudo crear la siguiente ocurrencia de ${post.id}:`, error);
 }

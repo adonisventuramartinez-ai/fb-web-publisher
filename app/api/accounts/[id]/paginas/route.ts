@@ -1,13 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../../../lib/db";
 import { desencriptar } from "../../../../../lib/crypto";
+import { GRAPH_BASE } from "../../../../../lib/graph";
+import { noAutorizado, sesionDe } from "../../../../../lib/auth";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const sesion = await sesionDe(req);
+  if (!sesion) return noAutorizado();
+
   try {
     const { data: cuenta, error } = await supabaseAdmin
       .from("cuentas_fb")
       .select("token_encriptado")
       .eq("id", params.id)
+      .eq("propietario_fb_id", sesion.sub)
       .single();
 
     if (error || !cuenta) {
@@ -15,9 +23,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     }
 
     const token = desencriptar(cuenta.token_encriptado);
-
     const res = await fetch(
-      `https://graph.facebook.com/v19.0/me/accounts?access_token=${token}&fields=id,name,category&limit=100`
+      `${GRAPH_BASE}/me/accounts?access_token=${encodeURIComponent(token)}&fields=id,name,category&limit=100`
     );
     const data = await res.json();
 
@@ -28,10 +35,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       );
     }
 
-    // No devolvemos access_token de las páginas al cliente - solo id/name.
-    // Cuando se programe un post, el servidor vuelve a pedir el token fresco.
+    // Solo id/name/category: los tokens de página nunca salen del servidor.
     const paginas = (data.data || []).map((p: any) => ({ id: p.id, name: p.name, category: p.category }));
-
     return NextResponse.json({ paginas });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Error al obtener páginas" }, { status: 500 });

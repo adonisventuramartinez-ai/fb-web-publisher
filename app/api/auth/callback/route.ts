@@ -1,23 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
+import { GRAPH_BASE, appUrl } from "../../../../lib/graph";
 
-// Esta función corre en el servidor (Vercel Serverless Function).
-// Es la ÚNICA parte que necesita el APP_SECRET, así que nunca se expone al navegador.
+// Esta función corre en el servidor. Es la ÚNICA que usa el APP_SECRET.
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   const { searchParams, origin } = new URL(req.url);
+  const baseUrl = appUrl(origin);
+
   const code = searchParams.get("code");
   const error = searchParams.get("error_description") || searchParams.get("error");
+  const state = searchParams.get("state");
+  const stateEsperado = req.cookies.get("fb_oauth_state")?.value;
 
-  // 🔧 FIX: Forzar el dominio correcto (tu URL de Vercel)
-  const allowedDomain = "https://fb-web-publisher.vercel.app";
+  const volver = (ruta: string) => {
+    const r = NextResponse.redirect(`${baseUrl}${ruta}`);
+    r.cookies.set("fb_oauth_state", "", { path: "/", maxAge: 0 });
+    return r;
+  };
 
-  // Usar el dominio permitido en producción, o el origin en desarrollo
-  const baseUrl = process.env.NODE_ENV === "production" ? allowedDomain : origin;
+  if (error) return volver(`/?error=${encodeURIComponent(error)}`);
+  if (!code) return volver(`/?error=${encodeURIComponent("No se recibió el código de autorización")}`);
 
-  if (error) {
-    return NextResponse.redirect(`${baseUrl}/?error=${encodeURIComponent(error)}`);
-  }
-  if (!code) {
-    return NextResponse.redirect(`${baseUrl}/?error=No se recibió el código de autorización`);
+  // Anti-CSRF: el state que mandamos a Facebook tiene que coincidir con el de la cookie
+  if (!state || !stateEsperado || state !== stateEsperado) {
+    return volver(`/?error=${encodeURIComponent("Sesión de login inválida o expirada. Intenta de nuevo.")}`);
   }
 
   const APP_ID = process.env.FB_APP_ID!;
@@ -25,34 +32,31 @@ export async function GET(req: NextRequest) {
   const REDIRECT_URI = `${baseUrl}/api/auth/callback`;
 
   try {
-    // 1) Intercambia el "code" por un access_token de corta duración
-    const tokenUrl =
-      `https://graph.facebook.com/v19.0/oauth/access_token` +
-      `?client_id=${APP_ID}` +
-      `&client_secret=${APP_SECRET}` +
-      `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
-      `&code=${code}`;
-    const tokenRes = await fetch(tokenUrl);
+    // 1) code → token de corta duración
+    const tokenRes = await fetch(
+      `${GRAPH_BASE}/oauth/access_token` +
+        `?client_id=${APP_ID}` +
+        `&client_secret=${APP_SECRET}` +
+        `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
+        `&code=${encodeURIComponent(code)}`
+    );
     const tokenData = await tokenRes.json();
-    if (tokenData.error) {
-      throw new Error(tokenData.error.message || "Error al obtener el token");
-    }
+    if (tokenData.error) throw new Error(tokenData.error.message || "Error al obtener el token");
 
-    // 2) Lo cambia por un token de larga duración (~60 días)
-    const longUrl =
-      `https://graph.facebook.com/v19.0/oauth/access_token` +
-      `?grant_type=fb_exchange_token` +
-      `&client_id=${APP_ID}` +
-      `&client_secret=${APP_SECRET}` +
-      `&fb_exchange_token=${tokenData.access_token}`;
-    const longRes = await fetch(longUrl);
+    // 2) → token de larga duración (~60 días)
+    const longRes = await fetch(
+      `${GRAPH_BASE}/oauth/access_token` +
+        `?grant_type=fb_exchange_token` +
+        `&client_id=${APP_ID}` +
+        `&client_secret=${APP_SECRET}` +
+        `&fb_exchange_token=${encodeURIComponent(tokenData.access_token)}`
+    );
     const longData = await longRes.json();
     const finalToken = longData.access_token || tokenData.access_token;
 
-    // 3) Manda el token de vuelta al navegador en el fragmento (#) de la URL,
-    //    que NO se envía a ningún servidor - solo lo lee el JavaScript del cliente.
-    return NextResponse.redirect(`${baseUrl}/#token=${finalToken}`);
+    // 3) Se entrega en el fragmento (#) de la URL: no se envía a ningún servidor.
+    return volver(`/#token=${finalToken}`);
   } catch (err: any) {
-    return NextResponse.redirect(`${baseUrl}/?error=${encodeURIComponent(err.message)}`);
+    return volver(`/?error=${encodeURIComponent(err.message)}`);
   }
 }

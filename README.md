@@ -1,48 +1,50 @@
-# Publicador Multi-Página de Facebook (versión web)
+# Publicador Multi-Página de Facebook · v3.1 (Paso 1)
 
-App en Next.js para publicar fotos, videos y reels en varias páginas de Facebook a la vez, desplegable en Vercel.
+Next.js + Supabase + Vercel. Publica fotos, videos y reels en varias páginas, ahora o programado.
 
-## Cómo funciona
+## Qué cambió en el Paso 1
 
-- El login OAuth pasa por una función serverless (`/api/auth/callback`), la única parte que usa tu App Secret.
-- Las subidas de fotos/videos van **directo del navegador a Facebook** (no pasan por Vercel), así se evita el límite de tamaño de las funciones serverless.
+**Seguridad**
+- Sesión firmada (cookie httpOnly) emitida solo tras verificar el token de Facebook **en el servidor**.
+- `middleware.ts` protege todo `/api/*`; cada cuenta y publicación pertenece a su dueño.
+- `/api/cron` exige `CRON_SECRET` (si no está configurado, queda cerrado).
+- Se eliminaron `/api/acceso/*` (aceptaban un `fb_id` sin verificar).
+- Anti-CSRF en el login OAuth (`state` verificado) y por origen en las peticiones que modifican datos.
+- `next.config.js` ya no inyecta `FB_APP_SECRET` en el bundle. Cabeceras de seguridad añadidas.
+- RLS activado en las tablas (ver SQL).
 
-## 1. Configura tu app de Facebook
+**Cron confiable**
+- Reclamo atómico (no se publica dos veces aunque cron-job.org dispare dos ejecuciones).
+- Rescata posts atascados en "publicando" (> 10 min).
+- Facebook descarga el archivo desde una URL firmada: no se carga el video en la función.
+- Reels con la API oficial (`video_reels`, 3 pasos).
+- Resultado **por página**: un reintento solo repite las páginas que fallaron.
+- Reintentos con espera (5 → 20 → 60 min); errores fatales (token vencido, permisos) no se reintentan.
+- **Recurrencia real** (diaria / semanal), sin duplicados.
+- Versión de la Graph API en un solo lugar (`lib/graph.ts`, variable `NEXT_PUBLIC_GRAPH_VERSION`).
 
-En https://developers.facebook.com/apps/, en tu app existente (o una nueva):
+## Despliegue del Paso 1 (en este orden)
 
-1. **Inicio de sesión con Facebook → Configuración** → agrega esta Redirect URI (la vas a tener después de desplegar, ver paso 3):
-   ```
-   https://TU-PROYECTO.vercel.app/api/auth/callback
-   ```
-   (para probar en local, agrega también `http://localhost:3000/api/auth/callback`)
-
-2. Verifica que tengas los permisos: `pages_manage_posts`, `pages_read_engagement`, `pages_show_list`, `pages_read_user_content`.
-
-## 2. Prueba en local (opcional)
-
-```bash
-npm install
-cp .env.example .env.local
-# Edita .env.local con tu App ID y App Secret reales
-npm run dev
-```
-Abre http://localhost:3000
-
-## 3. Desplegar en Vercel
-
-1. Sube esta carpeta a un repositorio de GitHub (crea uno nuevo, sube todos estos archivos).
-2. Ve a https://vercel.com → **Add New → Project** → importa el repositorio.
-3. En **Environment Variables**, agrega:
-   - `FB_APP_ID` = tu App ID
-   - `FB_APP_SECRET` = tu App Secret
-   - `NEXT_PUBLIC_FB_APP_ID` = el mismo App ID
-4. Dale **Deploy**.
-5. Cuando termine, copia la URL que te da Vercel (ej. `https://fb-web-publisher-tuusuario.vercel.app`).
-6. Vuelve a Facebook Developers → Inicio de sesión con Facebook → Configuración, y agrega esa URL + `/api/auth/callback` como Redirect URI válida (paso 1).
-7. Abre tu URL de Vercel, dale "Conectar con Facebook", y prueba publicar.
+1. **Regenera tu App Secret** en developers.facebook.com → tu app → Configuración → Básica. (El anterior iba dentro del zip que compartiste: considéralo expuesto.)
+2. **Supabase → SQL Editor**: ejecuta `supabase/migrations/001_paso1_seguridad_y_cron.sql`.
+   Al final del archivo hay dos líneas comentadas para asignarte como dueño de tus cuentas/posts existentes: descoméntalas con tu `fb_id`.
+3. **Vercel → Settings → Environment Variables** (ver `.env.example`). Nuevas: `CRON_SECRET`, y opcionalmente `SESSION_SECRET`.
+   Actualiza `FB_APP_SECRET` con el nuevo valor y haz **Redeploy**.
+4. **cron-job.org**: edita el job para llamar a `https://TU-APP.vercel.app/api/cron` cada minuto y añade el header
+   `Authorization: Bearer <tu CRON_SECRET>`.
+5. En Facebook Developers, la Redirect URI sigue siendo `https://TU-APP.vercel.app/api/auth/callback`.
+6. Borra el `.env.local` / `.env.production` viejos de tu repositorio de GitHub (y de su historial si el repo es público).
 
 ## Notas
 
-- El token se guarda en `localStorage` del navegador (no en un servidor) — cierra sesión con el botón si usas una compu compartida.
-- Mientras la app de Facebook esté en modo Desarrollo, solo funcionará con tu usuario y los que agregues como Tester en "Roles de la app".
+- Supabase **Free** limita cada archivo a 50 MB. Para videos más grandes necesitas plan Pro y subir el límite en Storage → Settings.
+- Con Vercel Hobby el cron nativo solo corre 1 vez al día; por eso se usa cron-job.org (gratis, cada minuto).
+- Las publicaciones creadas antes de este paso no se verán hasta asignarles dueño (punto 2).
+
+## Desarrollo local
+
+```bash
+npm install
+cp .env.example .env.local   # rellena los valores
+npm run dev
+```
