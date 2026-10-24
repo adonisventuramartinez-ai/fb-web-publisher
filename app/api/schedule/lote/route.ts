@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
       if ((it.titulo && String(it.titulo).length > 255) || (it.mensaje && String(it.mensaje).length > 10000)) {
         return NextResponse.json({ error: "Título o mensaje demasiado largo" }, { status: 400 });
       }
-      filas.push({ ruta, fecha, titulo: it.titulo || null, mensaje: it.mensaje || null, nombre: it.archivo_nombre || null });
+      filas.push({ importacion_id: Number.isInteger(it.importacion_id) ? it.importacion_id : null, ruta, fecha, titulo: it.titulo || null, mensaje: it.mensaje || null, nombre: it.archivo_nombre || null });
     }
 
     const { data: cuenta } = await supabaseAdmin
@@ -88,6 +88,18 @@ export async function POST(req: NextRequest) {
       )
       .select("id");
     if (error) throw error;
+
+    // Los videos importados de TikTok que se acaban de programar pasan a "usado"
+    const usados = filas.map((f) => f.importacion_id).filter((x): x is number => x !== null);
+    if (usados.length) {
+      await supabaseAdmin
+        .from("importaciones")
+        .update({ estado: "usado" })
+        .in("id", usados)
+        .eq("propietario_fb_id", sesion.sub)
+        .eq("estado", "listo")
+        .then(() => {}, () => {});
+    }
 
     return NextResponse.json({ creados: data?.length ?? 0 });
   } catch (err: any) {

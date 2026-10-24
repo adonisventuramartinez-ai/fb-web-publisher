@@ -11,6 +11,8 @@ interface Theme {
 }
 interface Cuenta { id: number; nombre: string }
 interface PaginaCuenta { id: string; name: string }
+interface Elemento { nombre: string; file?: File; path?: string; descripcion?: string; autor?: string; importacionId?: number }
+interface Importado { id: number; titulo: string | null; descripcion: string | null; autor: string | null; duracion: number | null; archivo_url: string }
 interface Plantilla { id: number; nombre: string; titulo: string | null; mensaje: string | null }
 
 const DIAS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
@@ -27,7 +29,9 @@ export default function Lote({ theme }: { theme: Theme }) {
   const [sel, setSel] = useState<Set<string>>(new Set());
 
   const [tipo, setTipo] = useState<TipoContenido>("reel");
-  const [archivos, setArchivos] = useState<File[]>([]);
+  const [archivos, setArchivos] = useState<Elemento[]>([]);
+  const [importados, setImportados] = useState<Importado[]>([]);
+  const [selImp, setSelImp] = useState<Set<number>>(new Set());
   const [titulo, setTitulo] = useState("");
   const [mensaje, setMensaje] = useState("");
 
@@ -45,6 +49,7 @@ export default function Lote({ theme }: { theme: Theme }) {
   useEffect(() => {
     fetch("/api/accounts").then((r) => r.json()).then((d) => setCuentas(d.cuentas || []));
     cargarPlantillas();
+    cargarImportados();
   }, []);
 
   useEffect(() => {
@@ -54,6 +59,23 @@ export default function Lote({ theme }: { theme: Theme }) {
       .then((r) => r.json())
       .then((d) => (d.error ? (toast.error(d.error), setPaginas([])) : setPaginas(d.paginas || [])));
   }, [cuentaId]);
+
+  function cargarImportados() {
+    fetch("/api/importar").then((r) => r.json()).then((d) =>
+      setImportados((d.importaciones || []).filter((i: any) => i.tipo === "video" && i.estado === "listo" && i.archivo_url))
+    ).catch(() => {});
+  }
+
+  function agregarImportados() {
+    const nuevos: Elemento[] = importados
+      .filter((i) => selImp.has(i.id))
+      .map((i) => ({
+        nombre: (i.titulo || `TikTok ${i.id}`).slice(0, 80),
+        path: i.archivo_url, descripcion: i.descripcion || "", autor: i.autor || "", importacionId: i.id,
+      }));
+    setArchivos((a) => [...a, ...nuevos].slice(0, 60));
+    setSelImp(new Set());
+  }
 
   function cargarPlantillas() {
     fetch("/api/plantillas").then((r) => r.json()).then((d) => setPlantillas(d.plantillas || []));
@@ -68,11 +90,11 @@ export default function Lote({ theme }: { theme: Theme }) {
 
   function agregar(lista: FileList | null) {
     if (!lista) return;
-    const nuevos: File[] = [];
+    const nuevos: Elemento[] = [];
     for (const f of Array.from(lista)) {
       const v = validarArchivo(f, tipo);
       if (!v.valido) toast.error(`${f.name}: ${v.error}`);
-      else nuevos.push(f);
+      else nuevos.push({ nombre: f.name, file: f });
     }
     setArchivos((a) => [...a, ...nuevos].slice(0, 60));
     if (entrada.current) entrada.current.value = "";
@@ -119,25 +141,30 @@ export default function Lote({ theme }: { theme: Theme }) {
       const fallidos: string[] = [];
       for (let i = 0; i < archivos.length; i++) {
         const f = archivos[i];
-        setProgreso(`Subiendo ${i + 1} de ${archivos.length}: ${f.name}`);
+        setProgreso(`${f.file ? "Subiendo" : "Preparando"} ${i + 1} de ${archivos.length}: ${f.nombre}`);
         try {
-          const prep = await (await fetch("/api/subir-archivo", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ nombreArchivo: f.name }),
-          })).json();
-          if (prep.error) throw new Error(prep.error);
-          const { error } = await supabaseBrowser.storage.from(BUCKET).uploadToSignedUrl(prep.path, prep.token, f);
-          if (error) throw error;
+          let ruta = f.path || "";
+          if (f.file) {
+            const prep = await (await fetch("/api/subir-archivo", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ nombreArchivo: f.file.name }),
+            })).json();
+            if (prep.error) throw new Error(prep.error);
+            const { error } = await supabaseBrowser.storage.from(BUCKET).uploadToSignedUrl(prep.path, prep.token, f.file);
+            if (error) throw error;
+            ruta = prep.path;
+          }
           items.push({
-            archivo_url: prep.path,
-            archivo_nombre: f.name,
-            titulo: aplicarPlantilla(titulo, i + 1, f.name),
-            mensaje: aplicarPlantilla(mensaje, i + 1, f.name),
+            archivo_url: ruta,
+            archivo_nombre: f.nombre,
+            titulo: aplicarPlantilla(titulo, i + 1, f.nombre, f.descripcion || "", f.autor || ""),
+            mensaje: aplicarPlantilla(mensaje, i + 1, f.nombre, f.descripcion || "", f.autor || ""),
             fecha_programada: fechas[i].toISOString(),
+            importacion_id: f.importacionId,
           });
         } catch (e: any) {
-          fallidos.push(`${f.name} (${e.message || "error"})`);
+          fallidos.push(`${f.nombre} (${e.message || "error"})`);
         }
       }
       if (!items.length) throw new Error("No se pudo subir ningún archivo");
@@ -158,6 +185,7 @@ export default function Lote({ theme }: { theme: Theme }) {
       toast.success(`${res.creados} publicaciones programadas`);
       if (fallidos.length) toast.error(`No se subieron: ${fallidos.join(", ")}`, { duration: 8000 });
       setArchivos([]);
+      cargarImportados();
     } catch (e: any) {
       toast.error(e.message || "Error al programar el lote");
     } finally {
@@ -205,7 +233,7 @@ export default function Lote({ theme }: { theme: Theme }) {
         {archivos.map((f, i) => (
           <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, padding: "6px 0", borderTop: `1px solid ${theme.border}`, marginTop: i === 0 ? 10 : 0 }}>
             <span style={{ width: 24, color: theme.subtext }}>{i + 1}</span>
-            <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
+            <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.nombre}</span>
             <span style={{ color: fechas[i] ? theme.accent : "#c0392b", whiteSpace: "nowrap" }}>
               {fechas[i] ? fechas[i].toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "sin horario"}
             </span>
@@ -215,6 +243,33 @@ export default function Lote({ theme }: { theme: Theme }) {
           </div>
         ))}
       </div>
+
+      {tipo !== "foto" && (() => {
+        const enLote = new Set(archivos.map((a) => a.importacionId));
+        const disp = importados.filter((i) => !enLote.has(i.id));
+        if (!disp.length) return null;
+        return (
+          <div style={caja}>
+            <label style={etiqueta}>🎵 Importados de TikTok ({disp.length} listos)</label>
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <button onClick={() => setSelImp(new Set(disp.map((i) => i.id)))}>Marcar todos</button>
+              <button onClick={() => setSelImp(new Set())}>Ninguno</button>
+              <button onClick={agregarImportados} disabled={!selImp.size}>Agregar {selImp.size} al lote</button>
+            </div>
+            {disp.map((i) => (
+              <label key={i.id} style={{ display: "flex", gap: 8, fontSize: 13, padding: "4px 0", borderTop: `1px solid ${theme.border}` }}>
+                <input type="checkbox" checked={selImp.has(i.id)} onChange={() => {
+                  const n = new Set(selImp); n.has(i.id) ? n.delete(i.id) : n.add(i.id); setSelImp(n);
+                }} />
+                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{i.titulo || `TikTok ${i.id}`}</span>
+                <span style={{ color: tipo === "reel" && (i.duracion || 0) > 90 ? "#f59e0b" : theme.subtext }}>
+                  {i.duracion ? `${i.duracion}s` : ""}{tipo === "reel" && (i.duracion || 0) > 90 ? " ⚠️ >90 s" : ""}
+                </span>
+              </label>
+            ))}
+          </div>
+        );
+      })()}
 
       <div style={caja}>
         <label style={etiqueta}>3. Texto (variables: {"{n}"} = número, {"{nombre}"} = nombre del archivo)</label>

@@ -1,0 +1,31 @@
+name: TikTok worker
+
+# Lo despierta la app (Vercel) con workflow_dispatch cada vez que importas enlaces.
+on:
+  workflow_dispatch:
+
+# Una sola ejecución a la vez; si llegan más, queda una en espera (procesa todo lo pendiente).
+concurrency:
+  group: tiktok-worker
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  procesar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar yt-dlp
+        run: pip install -U yt-dlp requests
+      - name: Procesar importaciones pendientes
+        run: python worker/tiktok_worker.py
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          TIKTOK_COOKIES: ${{ secrets.TIKTOK_COOKIES }}

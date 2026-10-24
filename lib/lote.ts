@@ -50,8 +50,13 @@ export function repartirFechas(n: number, r: ReglasLote, ahoraMs: number = Date.
   return salida.sort((a, b) => a.getTime() - b.getTime());
 }
 
-// Variables de plantilla: {n} = número en el lote, {nombre} = nombre del archivo sin extensión
-export function aplicarPlantilla(texto: string, n: number, nombreArchivo: string): string {
+// Variables de plantilla: {n} = número en el lote, {nombre} = nombre del archivo sin extensión, {descripcion} y {autor} = datos originales del video importado de TikTok
+export function aplicarPlantilla(texto: string, n: number, nombreArchivo: string, descripcion = "", autor = ""): string {
   const base = nombreArchivo.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim();
-  return texto.replace(/\{n\}/g, String(n)).replace(/\{nombre\}/g, base);
+  // Se usan funciones para que símbolos como "$" en la descripción no se interpreten
+  return texto
+    .replace(/\{n\}/g, () => String(n))
+    .replace(/\{nombre\}/g, () => base)
+    .replace(/\{descripcion\}/g, () => descripcion)
+    .replace(/\{autor\}/g, () => autor);
 }

@@ -7,12 +7,13 @@ interface Theme {
 }
 
 export type Seccion =
-  | "inicio" | "publicar" | "programadas" | "lote" | "calendario" | "cola"
+  | "inicio" | "publicar" | "tiktok" | "programadas" | "lote" | "calendario" | "cola"
   | "historial" | "dashboard" | "cuentas";
 
 const ITEMS: { id: Seccion; icono: string; texto: string }[] = [
   { id: "inicio", icono: "🏠", texto: "Inicio" },
   { id: "publicar", icono: "✏️", texto: "Publicar ahora" },
+  { id: "tiktok", icono: "🎵", texto: "TikTok" },
   { id: "programadas", icono: "🗓️", texto: "Programar" },
   { id: "lote", icono: "📦", texto: "Lote" },
   { id: "calendario", icono: "📅", texto: "Calendario" },

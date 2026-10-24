@@ -16,6 +16,7 @@ import AccesoGate from "../components/AccesoGate";
 import CuentasManager from "../components/CuentasManager";
 import Programador from "../components/Programador";
 import Lote from "../components/Lote";
+import TikTok from "../components/TikTok";
 import Sidebar, { Seccion } from "../components/Sidebar";
 import Inicio from "../components/Inicio";
 import Cola from "../components/Cola";
@@ -437,6 +438,8 @@ export default function Home() {
 
               {tabActivo === "inicio" ? (
                 <Inicio theme={theme} onIr={setTabActivo} />
+              ) : tabActivo === "tiktok" ? (
+                <TikTok theme={theme} onIr={setTabActivo} />
               ) : tabActivo === "lote" ? (
                 <Lote theme={theme} />
               ) : tabActivo === "cola" ? (
