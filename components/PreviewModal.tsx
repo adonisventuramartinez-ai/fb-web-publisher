@@ -160,7 +160,7 @@ export default function PreviewModal({
                 background: theme.accent,
                 border: "none",
                 borderRadius: "6px",
-                color: "white",
+                color: (theme as any).accentText || "white",
                 fontWeight: 600,
                 cursor: "pointer",
               }}

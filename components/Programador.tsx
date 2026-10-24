@@ -382,7 +382,7 @@ export default function Programador({ theme }: ProgramadorProps) {
             width: "100%",
             padding: "12px",
             background: programando ? "#dadce0" : theme.accent,
-            color: "white",
+            color: (theme as any).accentText || "white",
             border: "none",
             borderRadius: "6px",
             fontSize: "15px",

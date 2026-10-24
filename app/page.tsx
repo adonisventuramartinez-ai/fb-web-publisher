@@ -15,6 +15,11 @@ import PreviewModal from "../components/PreviewModal";
 import AccesoGate from "../components/AccesoGate";
 import CuentasManager from "../components/CuentasManager";
 import Programador from "../components/Programador";
+import Lote from "../components/Lote";
+import Sidebar, { Seccion } from "../components/Sidebar";
+import Inicio from "../components/Inicio";
+import Cola from "../components/Cola";
+import Calendario from "../components/Calendario";
 
 interface Resultado {
   pagina: string;
@@ -43,17 +48,19 @@ const THEME_LIGHT = {
   subtext: "#5f6368",
   accent: "#1a73e8",
   accentBg: "#e8f0fe",
+  accentText: "white",
 };
 
 const THEME_DARK = {
-  bg: "#0f1115",
-  cardBg: "#1c1f26",
-  formBg: "#181b21",
-  border: "#2a2e37",
-  text: "#e8eaed",
-  subtext: "#9aa0a6",
-  accent: "#4c9aff",
-  accentBg: "#1a2942",
+  bg: "#08090a",
+  cardBg: "#111413",
+  formBg: "#0d100f",
+  border: "#232826",
+  text: "#e9efe9",
+  subtext: "#8a948d",
+  accent: "#b6ff3c",
+  accentBg: "#1b2610",
+  accentText: "#0b0f06",
 };
 
 export default function Home() {
@@ -70,7 +77,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [cargandoPaginas, setCargandoPaginas] = useState(false);
   const [historial, setHistorial] = useState<PublicacionHistorial[]>([]);
-  const [tabActivo, setTabActivo] = useState<"publicar" | "historial" | "dashboard" | "cuentas" | "programadas">("publicar");
+  const [tabActivo, setTabActivo] = useState<Seccion>("inicio");
   const [modoOscuro, setModoOscuro] = useState(false);
   const [previewAbierto, setPreviewAbierto] = useState(false);
 
@@ -80,8 +87,8 @@ export default function Home() {
     const guardado = localStorage.getItem("modo_oscuro");
     if (guardado !== null) {
       setModoOscuro(guardado === "true");
-    } else if (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-      setModoOscuro(true);
+    } else {
+      setModoOscuro(true); // el panel nuevo es oscuro por defecto
     }
 
     const hash = window.location.hash;
@@ -313,7 +320,9 @@ export default function Home() {
       </nav>
 
       {/* Contenido */}
-      <div style={{ maxWidth: "900px", margin: "0 auto", padding: "24px 16px" }}>
+      <div className="app-wrap" style={{ display: "flex", alignItems: "flex-start", maxWidth: "1280px", margin: "0 auto" }}>
+        {token && <Sidebar theme={theme} activo={tabActivo} onSelect={setTabActivo} onCerrarSesion={cerrarSesion} />}
+        <div style={{ flex: 1, minWidth: 0, padding: "24px 16px" }}>
         <div
           style={{
             background: theme.cardBg,
@@ -322,14 +331,14 @@ export default function Home() {
             padding: "24px",
           }}
         >
-          <div style={{ marginBottom: "24px" }}>
+          {(!token || tabActivo === "publicar") && <div style={{ marginBottom: "24px" }}>
             <h1 style={{ fontSize: "24px", fontWeight: "600", color: theme.text, margin: "0 0 4px 0" }}>
               Publica en Múltiples Páginas
             </h1>
             <p style={{ color: theme.subtext, fontSize: "14px", margin: "0" }}>
               Selecciona tus páginas y comparte contenido en todas simultáneamente
             </p>
-          </div>
+          </div>}
 
           {error && (
             <div
@@ -387,7 +396,8 @@ export default function Home() {
             </div>
           ) : (
             <>
-              {/* Stats */}
+              {tabActivo === "publicar" && (
+
               <div
                 style={{
                   display: "grid",
@@ -423,43 +433,17 @@ export default function Home() {
                   🔒 Cerrar sesión
                 </button>
               </div>
+              )}
 
-              {/* Tabs */}
-              <div
-                style={{
-                  display: "flex",
-                  gap: "8px",
-                  marginBottom: "20px",
-                  borderBottom: `1px solid ${theme.border}`,
-                  paddingBottom: "12px",
-                  overflowX: "auto",
-                }}
-              >
-                {(["publicar", "historial", "dashboard", "cuentas", "programadas"] as const).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setTabActivo(t)}
-                    style={{
-                      padding: "8px 16px",
-                      background: tabActivo === t ? theme.accentBg : "transparent",
-                      border: "none",
-                      borderRadius: "4px",
-                      color: tabActivo === t ? theme.accent : theme.subtext,
-                      fontWeight: tabActivo === t ? "600" : "400",
-                      cursor: "pointer",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {t === "publicar" && "✏️ Publicar"}
-                    {t === "historial" && `📜 Historial (${historial.length})`}
-                    {t === "dashboard" && "📊 Dashboard"}
-                    {t === "cuentas" && "👥 Cuentas"}
-                    {t === "programadas" && "🗓️ Programadas"}
-                  </button>
-                ))}
-              </div>
-
-              {tabActivo === "dashboard" ? (
+              {tabActivo === "inicio" ? (
+                <Inicio theme={theme} onIr={setTabActivo} />
+              ) : tabActivo === "lote" ? (
+                <Lote theme={theme} />
+              ) : tabActivo === "cola" ? (
+                <Cola theme={theme} />
+              ) : tabActivo === "calendario" ? (
+                <Calendario theme={theme} />
+              ) : tabActivo === "dashboard" ? (
                 <Dashboard historial={historial} theme={theme} />
               ) : tabActivo === "cuentas" ? (
                 <CuentasManager tokenActual={token} theme={theme} />
@@ -930,6 +914,7 @@ export default function Home() {
               )}
             </>
           )}
+        </div>
         </div>
       </div>
 

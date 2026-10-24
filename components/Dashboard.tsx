@@ -122,7 +122,7 @@ export default function Dashboard({ historial, theme }: DashboardProps) {
               borderRadius: "16px",
               border: `1px solid ${rango === f.valor ? theme.accent : theme.border}`,
               background: rango === f.valor ? theme.accent : "transparent",
-              color: rango === f.valor ? "white" : theme.text,
+              color: rango === f.valor ? (theme as any).accentText || "white" : theme.text,
               fontSize: "13px",
               cursor: "pointer",
             }}

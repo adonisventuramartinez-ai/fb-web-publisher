@@ -72,6 +72,12 @@ export async function GET(req: NextRequest) {
       salida.push(await procesar(post));
     }
 
+    // Latido: el panel lo usa para saber si el cron sigue corriendo (los errores se ignoran)
+    await supabaseAdmin
+      .from("cron_latido")
+      .upsert({ id: 1, ultimo: new Date().toISOString(), procesados: salida.length })
+      .then(() => {}, () => {});
+
     return NextResponse.json({
       ok: true,
       procesados: salida.length,

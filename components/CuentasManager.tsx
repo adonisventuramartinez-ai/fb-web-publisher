@@ -130,7 +130,7 @@ export default function CuentasManager({ tokenActual, theme }: CuentasManagerPro
               borderRadius: "6px",
               border: "none",
               background: theme.accent,
-              color: "white",
+              color: (theme as any).accentText || "white",
               fontSize: "13px",
               fontWeight: 600,
               cursor: guardando || !tokenActual ? "not-allowed" : "pointer",
