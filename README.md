@@ -24,7 +24,7 @@ programación en lote, series recurrentes e importación desde TikTok.
    - `vercel.json` ya incluye un cron diario como último recurso (el plan Hobby no permite más).
 5. Abre **`/admin` → 🩺 Diagnóstico**: te dice qué falta (variables, tablas, bucket, cron, Facebook, GitHub).
 6. Facebook Developers: la *Redirect URI* sigue siendo `https://TU-APP.vercel.app/api/auth/callback`.
-7. *(Solo si usas TikTok)* Secrets del repo en GitHub: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, opcional `TIKTOK_COOKIES`.
+7. *(Solo si usas TikTok)* Secrets del repo en GitHub: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (= la misma llave secreta que `SUPABASE_SECRET_KEY` de Vercel), opcional `TIKTOK_COOKIES`. Lee **[`ARREGLOS_CONEXIONES.md`](./ARREGLOS_CONEXIONES.md)** para el orden exacto y qué revisar si algo no conecta.
 
 ## Cómo funciona el cron
 

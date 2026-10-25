@@ -1,2 +1,3 @@
 requests>=2.32
-yt-dlp
+# curl-cffi permite a yt-dlp "imitar" un navegador real; TikTok bloquea mucho menos así.
+yt-dlp[default,curl-cffi]

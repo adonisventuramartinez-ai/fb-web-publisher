@@ -11,6 +11,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -21,8 +22,36 @@ from pathlib import Path
 import requests
 from yt_dlp import YoutubeDL
 
-SUPA = os.environ["SUPABASE_URL"].rstrip("/")
-KEY = os.environ["SUPABASE_SERVICE_KEY"]
+
+
+def _env(*nombres: str) -> str:
+    """Primer valor definido entre varios nombres posibles, sin espacios ni comillas de más."""
+    for n in nombres:
+        v = os.environ.get(n, "").strip()
+        if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
+            v = v[1:-1].strip()
+        if v:
+            return v
+    return ""
+
+
+def _fallo_config(msg: str):
+    print(f"::error::{msg}")  # aparece en rojo en la pestaña Actions de GitHub
+    sys.exit(1)
+
+
+# El mismo valor que SUPABASE_SECRET_KEY de Vercel. Se aceptan los tres nombres habituales
+# para que el secret del repo no tenga que llamarse de una forma exacta.
+SUPA = re.sub(r"/(rest|storage|auth)/v1/?$", "", _env("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL").rstrip("/"), flags=re.I).rstrip("/")
+KEY = _env("SUPABASE_SERVICE_KEY", "SUPABASE_SECRET_KEY", "SUPABASE_SERVICE_ROLE_KEY")
+if not SUPA or not KEY:
+    _fallo_config(
+        "Faltan los secrets SUPABASE_URL y SUPABASE_SERVICE_KEY en GitHub "
+        "(repo → Settings → Secrets and variables → Actions). SUPABASE_SERVICE_KEY = la misma llave "
+        "SECRETA (sb_secret_… o service_role) que SUPABASE_SECRET_KEY en Vercel."
+    )
+if KEY.startswith("sb_publishable_"):
+    _fallo_config("SUPABASE_SERVICE_KEY es la llave PÚBLICA (sb_publishable_…). Usa la SECRETA (sb_secret_…) de Supabase → Project Settings → API Keys.")
 BUCKET = os.environ.get("BUCKET", "archivos-programados")
 MAX_BYTES = int(os.environ.get("MAX_BYTES", str(50 * 1024 * 1024)))  # límite del plan gratuito
 PERFIL_MAX = int(os.environ.get("PERFIL_MAX", "30"))
@@ -85,17 +114,25 @@ def limpiar(msg: str) -> str:
     return re.sub(r"\x1b\[[0-9;]*m", "", str(msg)).strip()
 
 
-def error_amigable(exc: Exception) -> str:
+def error_amigable(exc: Exception, tipo: str = "video") -> str:
     m = limpiar(exc)
     bajo = m.lower()
-    if "private" in bajo:
-        return "El video es privado."
-    if any(x in bajo for x in ("unavailable", "removed", "deleted", "not found", "404")):
-        return "El video ya no está disponible (borrado o con restricción de región)."
-    if any(x in bajo for x in ("403", "429", "captcha", "blocked", "too many requests")):
-        return "TikTok bloqueó temporalmente la descarga. Reintenta en unos minutos."
-    if any(x in bajo for x in ("unable to extract", "secondary user", "sigi_state", "user id")):
-        return "No se pudo leer el perfil (TikTok lo bloquea a veces). Pega enlaces de videos sueltos o configura TIKTOK_COOKIES."
+    # Se quitan las URLs y los números largos (IDs de video) antes de buscar códigos HTTP:
+    # antes un ID como 7234403... contenía "403"/"404" y el error se clasificaba mal.
+    sin_ids = re.sub(r"https?://\S+|\d{6,}", " ", bajo)
+
+    if "no such file" in bajo and ("ffprobe" in bajo or "ffmpeg" in bajo):
+        return "Falta ffmpeg en el worker (el workflow debería instalarlo). Revisa el log en GitHub → Actions."
+    if re.search(r"\bprivate\b", sin_ids):
+        return "El video es privado." if tipo == "video" else "El perfil es privado."
+    if any(x in sin_ids for x in ("unavailable", "removed", "deleted", "not found", "does not exist")) or re.search(r"\b404\b", sin_ids):
+        return "El video ya no está disponible (borrado o con restricción de región)." if tipo == "video" else "No se encontró ese perfil."
+    if any(x in sin_ids for x in ("captcha", "blocked", "too many requests", "rate limit", "forbidden")) or re.search(r"\b(403|429)\b", sin_ids):
+        return "TikTok bloqueó temporalmente la descarga (suele pasar con las IP de GitHub). Reintenta en unos minutos o configura TIKTOK_COOKIES."
+    if any(x in sin_ids for x in ("unable to extract", "secondary user", "sigi_state", "user id")):
+        if tipo == "perfil":
+            return "No se pudo leer el perfil (TikTok lo bloquea a veces). Pega enlaces de videos sueltos o configura TIKTOK_COOKIES."
+        return "No se pudo leer el video (TikTok cambió su web o bloqueó la petición). Reintenta; si sigue, actualiza yt-dlp o configura TIKTOK_COOKIES."
     return m[:300] or "Error desconocido"
 
 
@@ -233,13 +270,33 @@ def procesar(job: dict):
     except Exception as e:
         print(f"[{job['id']}] ERROR: {limpiar(e)[:300]}")
         try:
-            actualizar(job["id"], {"estado": "error", "error": error_amigable(e), "terminado_en": ahora()})
+            actualizar(job["id"], {"estado": "error", "error": error_amigable(e, job.get("tipo", "video")), "terminado_en": ahora()})
         except Exception as e2:
             print(f"[{job['id']}] no se pudo guardar el error: {e2}")
 
 
+def comprobar_conexion():
+    """Falla ya, con un mensaje claro, si la URL/llave de Supabase no sirven o falta la tabla."""
+    try:
+        r = requests.get(f"{SUPA}/rest/v1/importaciones", headers=HEADERS, params={"select": "id", "limit": "1"}, timeout=30)
+    except requests.RequestException as e:
+        _fallo_config(f"No se pudo conectar a Supabase ({SUPA}): {e}. Revisa el secret SUPABASE_URL.")
+    if r.status_code in (401, 403):
+        _fallo_config(
+            f"Supabase rechazó la llave (HTTP {r.status_code}). SUPABASE_SERVICE_KEY debe ser la llave SECRETA "
+            "(sb_secret_… o service_role), del MISMO proyecto que SUPABASE_URL. " + r.text[:150]
+        )
+    if r.status_code == 404 or (r.status_code >= 400 and "importaciones" in r.text):
+        _fallo_config("La tabla `importaciones` no existe: ejecuta supabase/migrations/005_esquema_completo_y_automatizacion.sql en Supabase → SQL Editor.")
+    if r.status_code >= 300:
+        _fallo_config(f"Supabase respondió {r.status_code}: {r.text[:200]}")
+
+
 def main():
+    comprobar_conexion()
     rescatar()
+    if not (shutil.which("ffmpeg") and shutil.which("ffprobe")):
+        print("::warning::ffmpeg/ffprobe no está instalado: los videos fallarán (los perfiles sí funcionan).")
     total = 0
     for _ in range(8):  # varias rondas por si llegaron trabajos mientras se procesaba
         lista = pendientes()

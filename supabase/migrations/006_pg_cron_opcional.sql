@@ -2,7 +2,7 @@
 -- 006 · OPCIONAL — que Supabase dispare el cron él mismo (adiós cron-job.org)
 --
 -- Usa dos extensiones de Supabase:  pg_cron (programador) + pg_net (HTTP).
--- Cada minuto llama a  https://TU-APP.vercel.app/api/cron  con el CRON_SECRET.
+-- Cada minuto llama a  https://fb-web-publisher.vercel.app/api/cron  con el CRON_SECRET.
 --
 -- ANTES de ejecutar, cambia las dos líneas marcadas con  <<< CAMBIAR
 -- (Supabase → Database → Extensions: activa pg_cron y pg_net; el SQL Editor
@@ -18,7 +18,7 @@ create extension if not exists pg_net;
 
 -- El secreto se guarda cifrado en Vault (no en texto plano dentro del job)
 select vault.create_secret(
-  'PEGA_AQUI_TU_CRON_SECRET',          -- <<< CAMBIAR: el mismo valor que CRON_SECRET en Vercel
+  '9aqkGwqJiyyUMDQvEzROD7rqXHYeUX3Ywcj5ehMom2s=',          -- <<< CAMBIAR: el mismo valor que CRON_SECRET en Vercel
   'publicador_cron_secret',
   'Bearer para /api/cron'
 )
@@ -34,7 +34,7 @@ select cron.schedule(
   '* * * * *',
   $$
   select net.http_get(
-    url := 'https://TU-APP.vercel.app/api/cron',   -- <<< CAMBIAR: tu dominio de Vercel
+    url := 'https://fb-web-publisher.vercel.app/api/cron',   -- <<< CAMBIAR: tu dominio de Vercel
     headers := jsonb_build_object(
       'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'publicador_cron_secret')
     ),

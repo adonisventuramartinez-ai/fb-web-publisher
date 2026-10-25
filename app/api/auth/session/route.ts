@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { supabaseAdmin } from "../../../../lib/db";
-import { GRAPH_BASE } from "../../../../lib/graph";
+import { GRAPH_BASE, fbAppId, fbAppSecret } from "../../../../lib/graph";
 import { COOKIE_USUARIO, firmarSesion, verificarSesion } from "../../../../lib/session";
 import { opcionesCookie } from "../../../../lib/auth";
 import { ipDe, permitido } from "../../../../lib/rateLimit";
@@ -26,12 +26,12 @@ export async function POST(req: NextRequest) {
     }
 
     // 1) El token tiene que ser válido Y emitido para NUESTRA app
-    const appToken = `${process.env.FB_APP_ID}|${process.env.FB_APP_SECRET}`;
+    const appToken = `${fbAppId()}|${fbAppSecret()}`;
     const dbgRes = await fetch(
       `${GRAPH_BASE}/debug_token?input_token=${encodeURIComponent(token)}&access_token=${encodeURIComponent(appToken)}`
     );
     const dbg = (await dbgRes.json())?.data;
-    if (!dbg?.is_valid || dbg.app_id !== process.env.FB_APP_ID || !dbg.user_id) {
+    if (!dbg?.is_valid || String(dbg.app_id) !== fbAppId() || !dbg.user_id) {
       return NextResponse.json({ estado: "sin_login" }, { status: 401 });
     }
     const fbId: string = String(dbg.user_id);

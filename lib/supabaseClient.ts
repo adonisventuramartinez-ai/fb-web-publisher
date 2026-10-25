@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { limpiarEnv, urlSupabase } from "./env";
 
 // Esta llave (anon/publishable) es SEGURA de exponer al navegador -
 // es la que Supabase diseñó para esto. Nunca uses aquí la llave secreta.
@@ -9,9 +10,10 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 let cliente: SupabaseClient | null = null;
 
 function crear(): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
-  const anon =
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "";
+  const url = urlSupabase(process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL);
+  const anon = limpiarEnv(
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+  );
   if (!url || !anon) {
     throw new Error(
       "Faltan NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY en Vercel (y hay que volver a desplegar: las NEXT_PUBLIC_ se fijan al compilar)."

@@ -19,16 +19,16 @@ const MINUTOS_PARA_RESCATAR = 10; // un "publicando" más viejo que esto se cons
 const HORAS_ENTRE_LIMPIEZAS = 6;
 
 function secretoValido(req: NextRequest): boolean {
-  const esperado = process.env.CRON_SECRET;
+  const esperado = (process.env.CRON_SECRET || "").trim();
   if (!esperado) return false; // sin CRON_SECRET configurado la ruta queda cerrada
-  const recibido = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+  const recibido = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
   const a = crypto.createHash("sha256").update(recibido).digest();
   const b = crypto.createHash("sha256").update(esperado).digest();
   return crypto.timingSafeEqual(a, b);
 }
 
 export async function GET(req: NextRequest) {
-  if (!process.env.CRON_SECRET) {
+  if (!(process.env.CRON_SECRET || "").trim()) {
     return NextResponse.json({ error: "CRON_SECRET no está configurado en el servidor" }, { status: 500 });
   }
   if (!secretoValido(req)) {

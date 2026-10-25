@@ -71,10 +71,15 @@ export default function TikTok({ theme, onIr }: { theme: Theme; onIr: (s: Seccio
   }
 
   async function procesarAhora() {
-    const d = await (await fetch("/api/importar", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accion: "procesar" }),
-    })).json();
-    d.despacho?.ok ? toast.success("Worker despertado") : toast.error(d.despacho?.error || d.error || "No se pudo");
+    try {
+      const d = await (await fetch("/api/importar", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accion: "procesar" }),
+      })).json();
+      if (d.despacho?.ok) toast.success("Worker despertado");
+      else toast.error(d.despacho?.error || d.error || "No se pudo despertar el worker", { duration: 9000 });
+    } catch (e: any) {
+      toast.error(e?.message || "No se pudo despertar el worker");
+    }
   }
 
   const yaImportadas = new Set(items.filter((i) => i.tipo === "video" && i.estado !== "error").map((i) => i.url));

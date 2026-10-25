@@ -21,11 +21,12 @@ export async function POST(req: NextRequest) {
 
   const { password } = await req.json().catch(() => ({ password: "" }));
 
-  if (!process.env.ADMIN_PASSWORD) {
+  const adminPassword = (process.env.ADMIN_PASSWORD || "").trim();
+  if (!adminPassword) {
     return NextResponse.json({ error: "ADMIN_PASSWORD no está configurada en el servidor" }, { status: 500 });
   }
 
-  if (typeof password !== "string" || !iguales(password, process.env.ADMIN_PASSWORD)) {
+  if (typeof password !== "string" || !iguales(password.trim(), adminPassword)) {
     await new Promise((r) => setTimeout(r, 800)); // frena la fuerza bruta
     return NextResponse.json({ error: "Contraseña incorrecta" }, { status: 401 });
   }

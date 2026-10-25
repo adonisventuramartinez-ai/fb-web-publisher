@@ -23,7 +23,7 @@ jobs:
         run: npx tsc --noEmit
       - name: Pruebas
         run: npm test
-      - name: Build de producción (variables falsas: solo comprueba que compila)
+      - name: "Build de producción (variables falsas: solo comprueba que compila)"
         run: npm run build
         env:
           NEXT_PUBLIC_FB_APP_ID: "0"

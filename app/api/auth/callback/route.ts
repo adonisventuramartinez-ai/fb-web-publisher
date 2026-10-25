@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GRAPH_BASE, appUrl } from "../../../../lib/graph";
+import { GRAPH_BASE, appUrl, fbAppId, fbAppSecret } from "../../../../lib/graph";
 
 // Esta función corre en el servidor. Es la ÚNICA que usa el APP_SECRET.
 export const dynamic = "force-dynamic";
@@ -27,9 +27,13 @@ export async function GET(req: NextRequest) {
     return volver(`/?error=${encodeURIComponent("Sesión de login inválida o expirada. Intenta de nuevo.")}`);
   }
 
-  const APP_ID = process.env.FB_APP_ID!;
-  const APP_SECRET = process.env.FB_APP_SECRET!;
+  const APP_ID = fbAppId();
+  const APP_SECRET = fbAppSecret();
   const REDIRECT_URI = `${baseUrl}/api/auth/callback`;
+
+  if (!APP_ID || !APP_SECRET) {
+    return volver(`/?error=${encodeURIComponent("Faltan FB_APP_ID / FB_APP_SECRET en las variables de entorno de Vercel")}`);
+  }
 
   try {
     // 1) code → token de corta duración

@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { limpiarEnv, urlSupabase, tipoLlaveSupabase, esLlaveSecreta } from "./env";
 
 // Cliente admin: usa la llave secreta, SOLO se importa en código de servidor
 // (rutas API). Nunca debe llegar al navegador.
@@ -10,11 +11,18 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 let cliente: SupabaseClient | null = null;
 
 function crear(): SupabaseClient {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const secreta = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = urlSupabase(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const secreta = limpiarEnv(process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY);
   if (!url || !secreta) {
     throw new Error(
       "Faltan variables de entorno de Supabase (SUPABASE_URL / SUPABASE_SECRET_KEY). Revisa Vercel → Settings → Environment Variables."
+    );
+  }
+  // Error muy común: pegar la llave pública donde va la secreta. Mejor fallar con un mensaje claro
+  // que dejar que cada consulta responda "permission denied for table ...".
+  if (!esLlaveSecreta(tipoLlaveSupabase(secreta)) && tipoLlaveSupabase(secreta) !== "desconocida") {
+    throw new Error(
+      "SUPABASE_SECRET_KEY contiene la llave PÚBLICA (anon/publishable). Usa la llave secreta (sb_secret_… o service_role) de Supabase → Project Settings → API Keys."
     );
   }
   return createClient(url, secreta, { auth: { persistSession: false } });

@@ -3,7 +3,7 @@ import crypto from "crypto";
 // ENCRYPTION_KEY debe ser un string hex de 64 caracteres (32 bytes).
 // Generar con: openssl rand -hex 32
 function getKey(): Buffer {
-  const hex = process.env.ENCRYPTION_KEY;
+  const hex = (process.env.ENCRYPTION_KEY || "").trim();
   if (!hex || hex.length !== 64) {
     throw new Error("ENCRYPTION_KEY debe ser un hex de 64 caracteres (32 bytes). Revisa tus variables de entorno.");
   }
