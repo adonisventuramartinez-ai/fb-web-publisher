@@ -1,8 +1,12 @@
 name: TikTok worker
 
 # Lo despierta la app (Vercel) con workflow_dispatch cada vez que importas enlaces.
+# Además corre solo cada 30 min como RED DE SEGURIDAD: si el despacho falló (token de
+# GitHub caducado, GitHub caído…) los enlaces pendientes se procesan igual.
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"
 
 # Una sola ejecución a la vez; si llegan más, queda una en espera (procesa todo lo pendiente).
 concurrency:
@@ -17,13 +21,44 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
+      # Paso barato (segundos): si no hay nada pendiente, termina sin instalar nada
+      # (así la ejecución programada casi no gasta minutos de Actions).
+      - name: ¿Hay importaciones pendientes?
+        id: hay
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_KEY" ]; then
+            echo "::warning::Faltan los secrets SUPABASE_URL / SUPABASE_SERVICE_KEY (Settings → Secrets and variables → Actions). Si no usas la pestaña TikTok, ignora este aviso."
+            echo "hay=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$SUPABASE_SERVICE_KEY" == sb_* ]]; then
+            AUTH=(-H "apikey: $SUPABASE_SERVICE_KEY")
+          else
+            AUTH=(-H "apikey: $SUPABASE_SERVICE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_KEY")
+          fi
+          RESP=$(curl -sS --fail-with-body -G "${SUPABASE_URL%/}/rest/v1/importaciones" \
+            --data-urlencode "select=id" \
+            --data-urlencode "estado=in.(pendiente,procesando)" \
+            --data-urlencode "limit=1" "${AUTH[@]}")
+          echo "Respuesta: $RESP"
+          if [ "$RESP" = "[]" ]; then echo "hay=false" >> "$GITHUB_OUTPUT"; else echo "hay=true" >> "$GITHUB_OUTPUT"; fi
+
       - uses: actions/checkout@v4
+        if: steps.hay.outputs.hay == 'true'
       - uses: actions/setup-python@v5
+        if: steps.hay.outputs.hay == 'true'
         with:
           python-version: "3.12"
-      - name: Instalar yt-dlp
-        run: pip install -U yt-dlp requests
+          cache: pip
+          cache-dependency-path: worker/requirements.txt
+      - name: Instalar yt-dlp (siempre la última: TikTok cambia a menudo)
+        if: steps.hay.outputs.hay == 'true'
+        run: pip install -U -r worker/requirements.txt
       - name: Procesar importaciones pendientes
+        if: steps.hay.outputs.hay == 'true'
         run: python worker/tiktok_worker.py
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

@@ -5,7 +5,8 @@ import { COOKIE_ADMIN, COOKIE_USUARIO, verificarSesion } from "./lib/session";
 //  - /api/auth/*        login con Facebook y creación de sesión
 //  - /api/admin/login   login del administrador
 //  - /api/cron          se protege con CRON_SECRET dentro de la propia ruta
-const PUBLICAS = [/^\/api\/auth\//, /^\/api\/admin\/login$/, /^\/api\/cron$/];
+//  - /api/health        liveness mínimo para monitores de disponibilidad (no revela nada)
+const PUBLICAS = [/^\/api\/auth\//, /^\/api\/admin\/login$/, /^\/api\/cron$/, /^\/api\/health$/];
 
 function json(status: number, error: string) {
   return NextResponse.json({ error }, { status });

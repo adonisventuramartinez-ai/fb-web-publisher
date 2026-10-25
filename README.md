@@ -1,45 +1,49 @@
-# Publicador Multi-Página de Facebook · v3.1 (Paso 1)
+# Publicador Multi-Página de Facebook · v3.2
 
-Next.js + Supabase + Vercel. Publica fotos, videos y reels en varias páginas, ahora o programado.
+Next.js 15 + Supabase + Vercel. Publica fotos, videos y reels en varias páginas, ahora o programado, con
+programación en lote, series recurrentes e importación desde TikTok.
 
-## Qué cambió en el Paso 1
+> **Qué cambió en la v3.2 → lee [`CAMBIOS.md`](./CAMBIOS.md).** Resumen: cron que no duplica ni se atasca,
+> limpieza automática de Storage, diagnóstico en `/admin`, sesiones revocables, freno anti fuerza bruta,
+> Next 15, CI y pruebas.
 
-**Seguridad**
-- Sesión firmada (cookie httpOnly) emitida solo tras verificar el token de Facebook **en el servidor**.
-- `middleware.ts` protege todo `/api/*`; cada cuenta y publicación pertenece a su dueño.
-- `/api/cron` exige `CRON_SECRET` (si no está configurado, queda cerrado).
-- Se eliminaron `/api/acceso/*` (aceptaban un `fb_id` sin verificar).
-- Anti-CSRF en el login OAuth (`state` verificado) y por origen en las peticiones que modifican datos.
-- `next.config.js` ya no inyecta `FB_APP_SECRET` en el bundle. Cabeceras de seguridad añadidas.
-- RLS activado en las tablas (ver SQL).
+## Despliegue / actualización (en este orden)
 
-**Cron confiable**
-- Reclamo atómico (no se publica dos veces aunque cron-job.org dispare dos ejecuciones).
-- Rescata posts atascados en "publicando" (> 10 min).
-- Facebook descarga el archivo desde una URL firmada: no se carga el video en la función.
-- Reels con la API oficial (`video_reels`, 3 pasos).
-- Resultado **por página**: un reintento solo repite las páginas que fallaron.
-- Reintentos con espera (5 → 20 → 60 min); errores fatales (token vencido, permisos) no se reintentan.
-- **Recurrencia real** (diaria / semanal), sin duplicados.
-- Versión de la Graph API en un solo lugar (`lib/graph.ts`, variable `NEXT_PUBLIC_GRAPH_VERSION`).
+1. **Rota tus secretos si alguna vez subiste `.env.local` / `.env.production` a GitHub o los compartiste**
+   (el zip original traía el `FB_APP_SECRET`). developers.facebook.com → tu app → Configuración → Básica →
+   *Restablecer* App Secret. Borra esos archivos del repo (ya están en `.gitignore`) y, si el repo es público,
+   de su historial.
+2. **Supabase → SQL Editor**: ejecuta `supabase/migrations/005_esquema_completo_y_automatizacion.sql`
+   (es idempotente: se puede ejecutar sobre tu base actual sin perder datos). **Hazlo antes del deploy.**
+3. **Vercel → Settings → Environment Variables**: ver `.env.example`. Después **Redeploy**.
+4. **Cron** (elige uno; si pones los dos no pasa nada, el cron es idempotente):
+   - **Recomendado, todo dentro de Supabase:** ejecuta `supabase/migrations/006_pg_cron_opcional.sql`
+     (cambia tu dominio y tu `CRON_SECRET`). Dispara `/api/cron` cada minuto y hace mantenimiento diario.
+   - **cron-job.org:** job a `https://TU-APP.vercel.app/api/cron` cada minuto con header
+     `Authorization: Bearer <CRON_SECRET>`.
+   - `vercel.json` ya incluye un cron diario como último recurso (el plan Hobby no permite más).
+5. Abre **`/admin` → 🩺 Diagnóstico**: te dice qué falta (variables, tablas, bucket, cron, Facebook, GitHub).
+6. Facebook Developers: la *Redirect URI* sigue siendo `https://TU-APP.vercel.app/api/auth/callback`.
+7. *(Solo si usas TikTok)* Secrets del repo en GitHub: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, opcional `TIKTOK_COOKIES`.
 
-## Despliegue del Paso 1 (en este orden)
+## Cómo funciona el cron
 
-1. **Regenera tu App Secret** en developers.facebook.com → tu app → Configuración → Básica. (El anterior iba dentro del zip que compartiste: considéralo expuesto.)
-2. **Supabase → SQL Editor**: ejecuta `supabase/migrations/001_paso1_seguridad_y_cron.sql`.
-   Al final del archivo hay dos líneas comentadas para asignarte como dueño de tus cuentas/posts existentes: descoméntalas con tu `fb_id`.
-3. **Vercel → Settings → Environment Variables** (ver `.env.example`). Nuevas: `CRON_SECRET`, y opcionalmente `SESSION_SECRET`.
-   Actualiza `FB_APP_SECRET` con el nuevo valor y haz **Redeploy**.
-4. **cron-job.org**: edita el job para llamar a `https://TU-APP.vercel.app/api/cron` cada minuto y añade el header
-   `Authorization: Bearer <tu CRON_SECRET>`.
-5. En Facebook Developers, la Redirect URI sigue siendo `https://TU-APP.vercel.app/api/auth/callback`.
-6. Borra el `.env.local` / `.env.production` viejos de tu repositorio de GitHub (y de su historial si el repo es público).
+Cada minuto (`/api/cron`):
+
+1. Rescata posts atascados en "publicando" (> 10 min).
+2. Toma los vencidos y los **reclama de forma atómica** (nunca se publica dos veces aunque lleguen dos disparos a la vez).
+3. Publica hasta 3 posts en paralelo; cada **página** se guarda en cuanto termina, así un reintento o un rescate solo repite las que faltan.
+4. Reintentos con espera 5 → 20 → 60 min; los errores fatales (token vencido, permisos) no se reintentan y marcan la cuenta para reconectar.
+5. Series diarias/semanales: la siguiente ocurrencia sale de la **fecha original** (los reintentos ya no la desplazan).
+6. Cada 6 h borra de Storage los archivos que nada usa (ver `lib/limpieza.ts`; se apaga con `LIMPIEZA_STORAGE=off`).
 
 ## Notas
 
-- Supabase **Free** limita cada archivo a 50 MB. Para videos más grandes necesitas plan Pro y subir el límite en Storage → Settings.
-- Con Vercel Hobby el cron nativo solo corre 1 vez al día; por eso se usa cron-job.org (gratis, cada minuto).
-- Las publicaciones creadas antes de este paso no se verán hasta asignarles dueño (punto 2).
+- Supabase **Free** limita cada archivo a 50 MB y 1 GB en total (por eso existe la limpieza automática).
+  Para videos más grandes necesitas plan Pro y subir el límite en Storage → Settings.
+- Con Vercel Hobby el cron nativo solo corre 1 vez al día; por eso se usa pg_cron o cron-job.org.
+- El proyecto Free de Supabase se **pausa tras 7 días sin actividad**; el cron cada minuto lo mantiene despierto.
+- `GET /api/health` (público, mínimo) sirve para un monitor de disponibilidad (UptimeRobot, etc.).
 
 ## Desarrollo local
 
@@ -47,4 +51,6 @@ Next.js + Supabase + Vercel. Publica fotos, videos y reels en varias páginas, a
 npm install
 cp .env.example .env.local   # rellena los valores
 npm run dev
+npm test                     # pruebas de la lógica (planificador, lote, sesión, cifrado, TikTok)
+npm run typecheck
 ```

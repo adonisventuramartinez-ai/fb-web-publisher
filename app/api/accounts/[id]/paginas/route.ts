@@ -6,7 +6,8 @@ import { noAutorizado, sesionDe } from "../../../../../lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id: idParam } = await params;
   const sesion = await sesionDe(req);
   if (!sesion) return noAutorizado();
 
@@ -14,7 +15,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const { data: cuenta, error } = await supabaseAdmin
       .from("cuentas_fb")
       .select("token_encriptado")
-      .eq("id", params.id)
+      .eq("id", idParam)
       .eq("propietario_fb_id", sesion.sub)
       .single();
 

@@ -7,6 +7,7 @@ interface Cuenta {
   id: number;
   nombre: string;
   creado_en: string;
+  token_invalido_en?: string | null; // lo marca el cron cuando Facebook dice "token vencido"
 }
 
 interface Theme {
@@ -77,8 +78,26 @@ export default function CuentasManager({ tokenActual, theme }: CuentasManagerPro
     }
   }
 
+  async function reconectar(id: number) {
+    if (!tokenActual) return toast.error("Primero conecta con Facebook arriba");
+    const t = toast.loading("Reconectando…");
+    try {
+      const res = await fetch(`/api/accounts/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userToken: tokenActual }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "No se pudo reconectar");
+      toast.success(`Cuenta reconectada (${data.publicaciones_actualizadas ?? 0} publicaciones actualizadas)`, { id: t });
+      cargarCuentas();
+    } catch (e: any) {
+      toast.error(e.message || "Error al reconectar", { id: t });
+    }
+  }
+
   async function borrarCuenta(id: number, nombre: string) {
-    if (!confirm(`¿Eliminar la cuenta "${nombre}"? Esto no cancela publicaciones programadas ya creadas.`)) return;
+    if (!confirm(`¿Eliminar la cuenta "${nombre}"? Sus publicaciones pendientes o con error se cancelarán.`)) return;
     const res = await fetch(`/api/accounts/${id}`, { method: "DELETE" });
     if (res.ok) {
       toast.success("Cuenta eliminada");
@@ -171,8 +190,28 @@ export default function CuentasManager({ tokenActual, theme }: CuentasManagerPro
                 <div style={{ fontSize: "14px", fontWeight: 500, color: theme.text }}>{c.nombre}</div>
                 <div style={{ fontSize: "11px", color: theme.subtext }}>
                   Conectada: {new Date(c.creado_en).toLocaleDateString()}
+                  {c.token_invalido_en && (
+                    <span style={{ color: "#ef4444", fontWeight: 600, marginLeft: 8 }}>
+                      ⚠️ Token vencido
+                    </span>
+                  )}
                 </div>
               </div>
+              <div style={{ display: "flex", alignItems: "center" }}>
+              <button
+                onClick={() => reconectar(c.id)}
+                title="Guarda el token de la sesión actual en esta cuenta y actualiza sus publicaciones pendientes"
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: theme.accent,
+                  fontSize: "12px",
+                  cursor: "pointer",
+                  marginRight: "8px",
+                }}
+              >
+                🔄 Reconectar
+              </button>
               <button
                 onClick={() => borrarCuenta(c.id, c.nombre)}
                 style={{
@@ -185,6 +224,7 @@ export default function CuentasManager({ tokenActual, theme }: CuentasManagerPro
               >
                 🗑️ Eliminar
               </button>
+              </div>
             </div>
           ))}
         </div>

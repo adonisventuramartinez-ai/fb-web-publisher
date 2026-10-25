@@ -21,6 +21,7 @@ export interface SalidaPublicar {
   id?: string;
   error?: string;
   reintentable?: boolean;
+  codigo?: number;
 }
 
 // Códigos de error de Graph que NO tiene sentido reintentar
@@ -143,6 +144,7 @@ export async function publicarEnPagina(p: ParamsPublicar): Promise<SalidaPublica
       ok: false,
       error: e?.message || "Error desconocido",
       reintentable: e instanceof FbError ? e.reintentable : true,
+      codigo: e instanceof FbError ? e.codigo : undefined,
     };
   }
 }

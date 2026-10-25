@@ -43,6 +43,7 @@ export interface ResultadoPagina {
   id?: string;
   error?: string;
   reintentable?: boolean;
+  codigo?: number; // código de error de la Graph API (190 = token vencido)
   en: string; // ISO
 }
 
@@ -57,6 +58,9 @@ export interface PostProgramado {
   archivo_url: string; // path dentro del bucket, no URL pública
   archivo_nombre: string | null;
   fecha_programada: string;
+  // Fecha "de calendario" de la serie. Se guarda al reintentar (la fecha_programada se
+  // corre por el backoff) para que la siguiente ocurrencia no se desplace.
+  fecha_original: string | null;
   recurrencia: "ninguna" | "diaria" | "semanal";
   estado: EstadoPost;
   intentos: number;

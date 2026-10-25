@@ -46,11 +46,16 @@ export async function GET(req: NextRequest) {
   const sesion = await sesionDe(req);
   if (!sesion) return noAutorizado();
 
-  const { data, error } = await supabaseAdmin
-    .from("cuentas_fb")
-    .select("id, nombre, creado_en")
-    .eq("propietario_fb_id", sesion.sub)
-    .order("creado_en", { ascending: false });
+  const consulta = (columnas: string) =>
+    supabaseAdmin
+      .from("cuentas_fb")
+      .select(columnas)
+      .eq("propietario_fb_id", sesion.sub)
+      .order("creado_en", { ascending: false });
+
+  // token_invalido_en lo crea la migración 005: si aún no existe, se lista igual sin ese dato
+  let { data, error } = await consulta("id, nombre, creado_en, token_invalido_en");
+  if (error) ({ data, error } = await consulta("id, nombre, creado_en"));
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ cuentas: data });

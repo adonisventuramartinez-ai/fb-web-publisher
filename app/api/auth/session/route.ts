@@ -4,6 +4,7 @@ import { supabaseAdmin } from "../../../../lib/db";
 import { GRAPH_BASE } from "../../../../lib/graph";
 import { COOKIE_USUARIO, firmarSesion, verificarSesion } from "../../../../lib/session";
 import { opcionesCookie } from "../../../../lib/auth";
+import { ipDe, permitido } from "../../../../lib/rateLimit";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,10 @@ const DIAS_SESION = 7;
 // fb_id sin verificar, así que cualquiera podía suplantar a otro usuario).
 export async function POST(req: NextRequest) {
   try {
+    // Cada intento llama a Facebook (debug_token): se limita por IP para que nadie lo use de martillo
+    if (!(await permitido(`sesion:${ipDe(req)}`, 60, 300))) {
+      return NextResponse.json({ error: "Demasiados intentos. Espera un momento." }, { status: 429 });
+    }
     const { token } = await req.json();
     if (!token || typeof token !== "string") {
       return NextResponse.json({ estado: "sin_login", error: "Falta token" }, { status: 400 });

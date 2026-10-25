@@ -378,8 +378,8 @@ export default function Home() {
               <p style={{ color: theme.subtext, marginBottom: "24px" }}>
                 Autoriza la aplicación para empezar a publicar
               </p>
-              <a href={getLoginUrl()}>
-                <button
+              <button
+                  onClick={() => { window.location.href = getLoginUrl(); }}
                   style={{
                     background: "#1877f2",
                     color: "white",
@@ -393,7 +393,6 @@ export default function Home() {
                 >
                   Conectar con Facebook
                 </button>
-              </a>
             </div>
           ) : (
             <>

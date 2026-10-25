@@ -12,12 +12,70 @@ interface Solicitud {
   aprobado_en: string | null;
 }
 
+interface Chequeo {
+  id: string;
+  titulo: string;
+  nivel: "ok" | "aviso" | "error";
+  detalle: string;
+}
+
+function Diagnostico() {
+  const [cargando, setCargando] = useState(false);
+  const [datos, setDatos] = useState<{ resumen: "ok" | "aviso" | "error"; chequeos: Chequeo[] } | null>(null);
+
+  async function ejecutar() {
+    setCargando(true);
+    try {
+      const res = await fetch("/api/admin/diagnostico");
+      if (!res.ok) throw new Error("No autorizado o error del servidor");
+      setDatos(await res.json());
+    } catch (e: any) {
+      toast.error(e.message || "No se pudo ejecutar el diagnóstico");
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  useEffect(() => {
+    ejecutar();
+  }, []);
+
+  const icono = { ok: "✅", aviso: "⚠️", error: "❌" } as const;
+  const fondo = { ok: "#e6f4ea", aviso: "#fff4e5", error: "#fce8e6" } as const;
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+        <div style={{ fontSize: "14px", color: "#5f6368" }}>
+          {datos ? (datos.resumen === "ok" ? "Todo en orden." : datos.resumen === "aviso" ? "Funciona, con avisos." : "Hay problemas que arreglar.") : "Revisando…"}
+        </div>
+        <button
+          onClick={ejecutar}
+          disabled={cargando}
+          style={{ padding: "6px 14px", borderRadius: "6px", border: "1px solid #e0e0e0", background: "white", cursor: "pointer", fontSize: "13px" }}
+        >
+          {cargando ? "Revisando…" : "Volver a revisar"}
+        </button>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        {(datos?.chequeos || []).map((c) => (
+          <div key={c.id} style={{ background: fondo[c.nivel], padding: "12px 16px", borderRadius: "8px" }}>
+            <div style={{ fontWeight: 600, fontSize: "14px" }}>{icono[c.nivel]} {c.titulo}</div>
+            <div style={{ fontSize: "13px", color: "#3c4043", marginTop: "2px" }}>{c.detalle}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const [autenticado, setAutenticado] = useState(false);
   const [password, setPassword] = useState("");
   const [cargando, setCargando] = useState(false);
   const [solicitudes, setSolicitudes] = useState<Solicitud[]>([]);
   const [filtro, setFiltro] = useState<"todas" | "pendiente" | "aprobado" | "rechazado">("pendiente");
+  const [vista, setVista] = useState<"solicitudes" | "diagnostico">("solicitudes");
 
   async function cargarSolicitudes() {
     const res = await fetch("/api/admin/solicitudes");
@@ -121,6 +179,27 @@ export default function AdminPage() {
   return (
     <div style={{ minHeight: "100vh", background: "#f0f2f5", fontFamily: "-apple-system, sans-serif", padding: "24px" }}>
       <div style={{ maxWidth: "800px", margin: "0 auto" }}>
+        <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
+          {([["solicitudes", "👥 Solicitudes"], ["diagnostico", "🩺 Diagnóstico"]] as const).map(([v, t]) => (
+            <button
+              key={v}
+              onClick={() => setVista(v)}
+              style={{
+                padding: "8px 16px",
+                borderRadius: "8px",
+                border: "none",
+                background: vista === v ? "#1a73e8" : "white",
+                color: vista === v ? "white" : "#3c4043",
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
+        {vista === "diagnostico" ? <Diagnostico /> : (<>
         <h1 style={{ fontSize: "22px", marginBottom: "16px" }}>👥 Solicitudes de acceso</h1>
 
         <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
@@ -201,6 +280,7 @@ export default function AdminPage() {
             ))}
           </div>
         )}
+        </>)}
       </div>
     </div>
   );

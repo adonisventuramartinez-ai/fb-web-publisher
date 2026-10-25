@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Tipos (TypeScript)
+        run: npx tsc --noEmit
+      - name: Pruebas
+        run: npm test
+      - name: Build de producción (variables falsas: solo comprueba que compila)
+        run: npm run build
+        env:
+          NEXT_PUBLIC_FB_APP_ID: "0"
+          NEXT_PUBLIC_SUPABASE_URL: "https://ejemplo.supabase.co"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "ejemplo"
+      - name: Worker de TikTok compila
+        run: python -m py_compile worker/tiktok_worker.py

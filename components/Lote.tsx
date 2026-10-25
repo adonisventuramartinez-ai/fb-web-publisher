@@ -137,11 +137,12 @@ export default function Lote({ theme }: { theme: Theme }) {
 
     setEnviando(true);
     try {
-      const items: any[] = [];
+      const resultado: any[] = new Array(archivos.length).fill(null);
       const fallidos: string[] = [];
-      for (let i = 0; i < archivos.length; i++) {
+      let hechos = 0;
+
+      const subirUno = async (i: number) => {
         const f = archivos[i];
-        setProgreso(`${f.file ? "Subiendo" : "Preparando"} ${i + 1} de ${archivos.length}: ${f.nombre}`);
         try {
           let ruta = f.path || "";
           if (f.file) {
@@ -155,18 +156,31 @@ export default function Lote({ theme }: { theme: Theme }) {
             if (error) throw error;
             ruta = prep.path;
           }
-          items.push({
+          resultado[i] = {
             archivo_url: ruta,
             archivo_nombre: f.nombre,
             titulo: aplicarPlantilla(titulo, i + 1, f.nombre, f.descripcion || "", f.autor || ""),
             mensaje: aplicarPlantilla(mensaje, i + 1, f.nombre, f.descripcion || "", f.autor || ""),
             fecha_programada: fechas[i].toISOString(),
             importacion_id: f.importacionId,
-          });
+          };
         } catch (e: any) {
           fallidos.push(`${f.nombre} (${e.message || "error"})`);
+        } finally {
+          hechos++;
+          setProgreso(`Subiendo ${hechos} de ${archivos.length}…`);
         }
-      }
+      };
+
+      // 3 subidas a la vez: un lote de 40 videos tarda ~3 veces menos que subiéndolos de uno en uno
+      setProgreso(`Subiendo 0 de ${archivos.length}…`);
+      let siguiente = 0;
+      await Promise.all(
+        Array.from({ length: Math.min(3, archivos.length) }, async () => {
+          while (siguiente < archivos.length) await subirUno(siguiente++);
+        })
+      );
+      const items = resultado.filter(Boolean);
       if (!items.length) throw new Error("No se pudo subir ningún archivo");
 
       setProgreso("Programando…");

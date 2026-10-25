@@ -11,10 +11,11 @@ function idValido(id: string): number | null {
 }
 
 // DELETE: borra la importación. Si el video aún no se usó, también borra el archivo.
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id: idParam } = await params;
   const sesion = await sesionDe(req);
   if (!sesion) return noAutorizado();
-  const id = idValido(params.id);
+  const id = idValido(idParam);
   if (!id) return NextResponse.json({ error: "ID inválido" }, { status: 400 });
 
   const { data: fila } = await supabaseAdmin
@@ -38,10 +39,11 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
 }
 
 // PATCH { accion: "reintentar" } → un trabajo con error vuelve a la cola
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id: idParam } = await params;
   const sesion = await sesionDe(req);
   if (!sesion) return noAutorizado();
-  const id = idValido(params.id);
+  const id = idValido(idParam);
   if (!id) return NextResponse.json({ error: "ID inválido" }, { status: 400 });
 
   const body = await req.json().catch(() => ({}));

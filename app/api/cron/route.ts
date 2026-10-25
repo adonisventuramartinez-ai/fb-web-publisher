@@ -4,6 +4,7 @@ import { supabaseAdmin, BUCKET, PostProgramado, ResultadoPagina } from "../../..
 import { desencriptar } from "../../../lib/crypto";
 import { publicarEnPagina } from "../../../lib/fbServer";
 import { decidir, siguienteOcurrencia } from "../../../lib/planificador";
+import { limpiarStorage } from "../../../lib/limpieza";
 
 // Sin esto Next.js puede cachear el GET como estático y el cron recibiría
 // siempre la misma respuesta congelada.
@@ -11,9 +12,11 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const maxDuration = 60;
 
-const PRESUPUESTO_MS = 45_000; // dejamos margen antes del límite de la función
-const POSTS_POR_EJECUCION = 10;
+const PRESUPUESTO_MS = 40_000; // no se empieza ningún post nuevo pasado este tiempo (margen para terminar el último)
+const POSTS_POR_EJECUCION = 12;
+const CONCURRENCIA = 3; // posts que se publican a la vez
 const MINUTOS_PARA_RESCATAR = 10; // un "publicando" más viejo que esto se considera atascado
+const HORAS_ENTRE_LIMPIEZAS = 6;
 
 function secretoValido(req: NextRequest): boolean {
   const esperado = process.env.CRON_SECRET;
@@ -37,7 +40,9 @@ export async function GET(req: NextRequest) {
   const salida: any[] = [];
 
   try {
-    // 1) Rescatar posts atascados en "publicando" (la función murió a mitad)
+    // 1) Rescatar posts atascados en "publicando" (la función murió a mitad).
+    //    El resultado de cada página ya se guardó al terminar, así que el reintento
+    //    NO repite las páginas que sí salieron.
     const limite = new Date(inicio - MINUTOS_PARA_RESCATAR * 60_000).toISOString();
     const { data: rescatados } = await supabaseAdmin
       .from("posts_programados")
@@ -49,28 +54,35 @@ export async function GET(req: NextRequest) {
     // 2) Buscar vencidos
     const { data: posts, error } = await supabaseAdmin
       .from("posts_programados")
-      .select("*")
+      .select("id")
       .eq("estado", "pendiente")
       .lte("fecha_programada", ahoraISO)
       .order("fecha_programada", { ascending: true })
       .limit(POSTS_POR_EJECUCION);
     if (error) throw error;
 
-    for (const candidato of (posts || []) as PostProgramado[]) {
-      if (Date.now() - inicio > PRESUPUESTO_MS) break; // el resto se procesa en la próxima corrida
+    // 3) Procesar con un pequeño grupo de "trabajadores" en paralelo. Cada uno toma el
+    //    siguiente post de la fila y lo RECLAMA de forma atómica; así un post lento
+    //    (p. ej. un reel que tarda en procesarse) no bloquea a los demás.
+    const fila = [...(posts || [])] as { id: number }[];
+    const trabajador = async () => {
+      while (fila.length && Date.now() - inicio < PRESUPUESTO_MS) {
+        const candidato = fila.shift()!;
+        // Reclamo atómico: solo UNA ejecución consigue pasar de pendiente → publicando
+        const { data: reclamado } = await supabaseAdmin
+          .from("posts_programados")
+          .update({ estado: "publicando", bloqueado_en: new Date().toISOString() })
+          .eq("id", candidato.id)
+          .eq("estado", "pendiente")
+          .select("*");
+        if (!reclamado?.length) continue; // otra ejecución se lo llevó (o se canceló)
+        salida.push(await procesar(reclamado[0] as PostProgramado));
+      }
+    };
+    await Promise.all(Array.from({ length: CONCURRENCIA }, trabajador));
 
-      // 3) Reclamo atómico: solo UNA ejecución consigue pasar de pendiente → publicando
-      const { data: reclamado } = await supabaseAdmin
-        .from("posts_programados")
-        .update({ estado: "publicando", bloqueado_en: new Date().toISOString() })
-        .eq("id", candidato.id)
-        .eq("estado", "pendiente")
-        .select("*");
-      if (!reclamado?.length) continue; // otra ejecución se lo llevó
-      const post = reclamado[0] as PostProgramado;
-
-      salida.push(await procesar(post));
-    }
+    // 4) Mantenimiento (solo si sobra tiempo): limpieza de Storage cada pocas horas
+    const limpieza = await mantenimiento(inicio);
 
     // Latido: el panel lo usa para saber si el cron sigue corriendo (los errores se ignoran)
     await supabaseAdmin
@@ -82,6 +94,8 @@ export async function GET(req: NextRequest) {
       ok: true,
       procesados: salida.length,
       rescatados: rescatados?.length ?? 0,
+      pendientes_sin_atender: fila.length,
+      limpieza,
       ms: Date.now() - inicio,
       resultados: salida,
     });
@@ -91,8 +105,49 @@ export async function GET(req: NextRequest) {
   }
 }
 
+async function mantenimiento(inicio: number) {
+  if (process.env.LIMPIEZA_STORAGE === "off") return null;
+  if (Date.now() - inicio > PRESUPUESTO_MS - 10_000) return null; // sin tiempo: queda para la próxima
+  try {
+    // La columna ultima_limpieza la crea la migración 005; si no existe, se omite sin romper nada
+    const { data, error } = await supabaseAdmin.from("cron_latido").select("ultima_limpieza").eq("id", 1).maybeSingle();
+    if (error) return null;
+    const ultima = data?.ultima_limpieza ? new Date(data.ultima_limpieza).getTime() : 0;
+    if (Date.now() - ultima < HORAS_ENTRE_LIMPIEZAS * 3600_000) return null;
+
+    const r = await limpiarStorage();
+    await supabaseAdmin
+      .from("cron_latido")
+      .upsert({ id: 1, ultima_limpieza: new Date().toISOString() })
+      .then(() => {}, () => {});
+    return r;
+  } catch (e: any) {
+    console.error("[cron] limpieza de Storage falló:", e?.message || e);
+    return null;
+  }
+}
+
 async function procesar(post: PostProgramado) {
   const resultados: Record<string, ResultadoPagina> = { ...(post.resultados || {}) };
+
+  // Los guardados se encadenan para que lleguen en orden (si dos páginas terminan a la vez,
+  // el último en escribir siempre trae el estado completo). También renueva "bloqueado_en":
+  // un post que sigue trabajando no será "rescatado" por otra ejecución.
+  let cola: Promise<unknown> = Promise.resolve();
+  const guardarProgreso = () => {
+    const copia = JSON.parse(JSON.stringify(resultados));
+    cola = cola.then(() =>
+      supabaseAdmin
+        .from("posts_programados")
+        .update({ resultados: copia, bloqueado_en: new Date().toISOString() })
+        .eq("id", post.id)
+        .then(
+          ({ error }) => error && console.error(`[cron] no se pudo guardar el progreso del post ${post.id}:`, error.message),
+          () => {}
+        )
+    );
+    return cola;
+  };
 
   try {
     // URL firmada para que Facebook descargue el archivo él mismo (6 h de vigencia)
@@ -127,6 +182,8 @@ async function procesar(post: PostProgramado) {
           mensaje: post.mensaje,
         });
         resultados[pagina.id] = { ...r, en: new Date().toISOString() };
+        // Guardar YA: si la función muere ahora, esta página no se vuelve a publicar
+        await guardarProgreso();
       })
     );
   } catch (e: any) {
@@ -136,6 +193,16 @@ async function procesar(post: PostProgramado) {
         resultados[p.id] = { ok: false, error: e.message, reintentable: true, en: new Date().toISOString() };
       }
     }
+  }
+  await cola;
+
+  // Token de Facebook vencido o revocado: se marca la cuenta para que el panel pida reconectar
+  if (post.cuenta_id && Object.values(resultados).some((r) => !r.ok && r.codigo === 190)) {
+    await supabaseAdmin
+      .from("cuentas_fb")
+      .update({ token_invalido_en: new Date().toISOString() })
+      .eq("id", post.cuenta_id)
+      .then(() => {}, () => {});
   }
 
   const ahora = Date.now();
@@ -159,9 +226,19 @@ async function procesar(post: PostProgramado) {
     ultimo_error: decision.ultimoError,
     bloqueado_en: null,
   };
-  if (decision.proximaFecha) cambios.fecha_programada = decision.proximaFecha;
+  if (decision.proximaFecha) {
+    cambios.fecha_programada = decision.proximaFecha;
+    // El reintento corre la fecha (5/20/60 min). Se recuerda la fecha original para que la
+    // serie diaria/semanal no se vaya desplazando con cada fallo.
+    if (!post.fecha_original) cambios.fecha_original = post.fecha_programada;
+  }
 
-  const { error } = await supabaseAdmin.from("posts_programados").update(cambios).eq("id", post.id);
+  let { error } = await supabaseAdmin.from("posts_programados").update(cambios).eq("id", post.id);
+  if (error && "fecha_original" in cambios) {
+    // Base de datos sin la migración 005: se guarda igual sin esa columna para no dejar el post atascado
+    delete cambios.fecha_original;
+    ({ error } = await supabaseAdmin.from("posts_programados").update(cambios).eq("id", post.id));
+  }
   if (error) console.error(`[cron] no se pudo guardar el resultado del post ${post.id}:`, error);
 
   return {
@@ -175,7 +252,7 @@ async function procesar(post: PostProgramado) {
 }
 
 async function programarSiguiente(post: PostProgramado, ahoraMs: number) {
-  const proxima = siguienteOcurrencia(post.fecha_programada, post.recurrencia, ahoraMs);
+  const proxima = siguienteOcurrencia(post.fecha_original ?? post.fecha_programada, post.recurrencia, ahoraMs);
   if (!proxima) return;
 
   const serie = post.serie_id ?? post.id;

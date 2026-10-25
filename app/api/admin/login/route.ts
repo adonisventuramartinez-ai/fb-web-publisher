@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { COOKIE_ADMIN, firmarSesion } from "../../../../lib/session";
 import { opcionesCookie } from "../../../../lib/auth";
+import { ipDe, permitido } from "../../../../lib/rateLimit";
 
 // ADMIN_PASSWORD vive SOLO en variable de entorno. La cookie lleva una sesión
 // firmada con expiración dentro de la firma (8 h), no la contraseña.
@@ -12,6 +13,12 @@ function iguales(a: string, b: string): boolean {
 }
 
 export async function POST(req: NextRequest) {
+  // Freno a la fuerza bruta: 8 intentos por IP cada 15 min
+  // (sin tope global a propósito: así un atacante no puede dejar al admin fuera)
+  if (!(await permitido(`admin:${ipDe(req)}`, 8, 900))) {
+    return NextResponse.json({ error: "Demasiados intentos. Espera unos minutos." }, { status: 429 });
+  }
+
   const { password } = await req.json().catch(() => ({ password: "" }));
 
   if (!process.env.ADMIN_PASSWORD) {
