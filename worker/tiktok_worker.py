@@ -216,6 +216,9 @@ def procesar_perfil(job: dict):
     })
 
 
+DETALLE_SSS: dict = {}  # id de importación -> por qué falló ssstik/sssinstagram (se muestra en el panel)
+
+
 def obtener_video(job: dict, carpeta: Path):
     """Devuelve (archivo, info). Primero ssstik/sssinstagram (sin marca de agua); si fallan, yt-dlp."""
     if USAR_SSS:
@@ -225,8 +228,10 @@ def obtener_video(job: dict, carpeta: Path):
             return r["archivo"], {"title": r.get("titulo"), "description": r.get("titulo"), "uploader": r.get("autor")}
         except SinMarcaError as e:
             print(f"  (sss falló: {limpiar(e)[:200]}; se usa yt-dlp)")
+            DETALLE_SSS[job["id"]] = limpiar(e)[:160]
         except Exception as e:  # cualquier cosa rara de red/parseo: no debe tumbar la importación
             print(f"  (sss error inesperado: {limpiar(e)[:200]}; se usa yt-dlp)")
+            DETALLE_SSS[job["id"]] = limpiar(e)[:160]
 
     for resto in carpeta.glob("sss_*"):  # restos de un intento fallido de sss
         resto.unlink(missing_ok=True)
@@ -296,7 +301,11 @@ def procesar(job: dict):
     except Exception as e:
         print(f"[{job['id']}] ERROR: {limpiar(e)[:300]}")
         try:
-            actualizar(job["id"], {"estado": "error", "error": error_amigable(e, job.get("tipo", "video")), "terminado_en": ahora()})
+            msg = error_amigable(e, job.get("tipo", "video"))
+            if job["id"] in DETALLE_SSS:
+                nombre = "sssinstagram" if plataforma_de(job["url"]) == "instagram" else "ssstik"
+                msg += f" [Detalle {nombre}: {DETALLE_SSS[job['id']]}]"
+            actualizar(job["id"], {"estado": "error", "error": msg[:500], "terminado_en": ahora()})
         except Exception as e2:
             print(f"[{job['id']}] no se pudo guardar el error: {e2}")
 
