@@ -34,3 +34,22 @@ test("hashtags: sin descripción usa los genéricos", () => {
 test("armarMensaje une texto y hashtags", () => {
   assert.equal(armarMensaje("Hola #x", ["#a", "#a", "#b"]), "Hola\n\n#a #b");
 });
+
+import { aHashtag, parsearTrendsRss } from "../lib/tendencias";
+
+test("tendencias: parsea el RSS, crea hashtags y prioriza las relacionadas", () => {
+  const xml = `<rss xmlns:ht="https://trends.google.com/trending/rss"><channel>
+    <item><title>Béisbol Dominicano</title><ht:approx_traffic>5K+</ht:approx_traffic></item>
+    <item><title>Receta de arroz</title><ht:approx_traffic>200+</ht:approx_traffic></item>
+    <item><title><![CDATA[Tom &amp; Jerry]]></title></item>
+    <item><title>una frase demasiado larga para ser hashtag de verdad</title></item>
+  </channel></rss>`;
+  const t = parsearTrendsRss(xml, "Mira mi receta de arroz con coco");
+  assert.equal(t[0].termino, "Receta de arroz");
+  assert.equal(t[0].relacionada, true);
+  assert.equal(t[0].hashtag, "#recetadearroz");
+  assert.equal(t.find((x) => x.termino === "Béisbol Dominicano")?.hashtag, "#beisboldominicano");
+  assert.equal(t.find((x) => x.termino === "Béisbol Dominicano")?.trafico, "5K+");
+  assert.equal(t.find((x) => x.termino.startsWith("una frase"))?.hashtag, null);
+  assert.equal(aHashtag("Tom & Jerry"), "#tomjerry");
+});

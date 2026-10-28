@@ -53,3 +53,7 @@
 - Cada video "Listo" (TikTok o Instagram) tiene botón **Publicar ahora**: elige cuenta/páginas, Reel o Video, **título sugerido** (6 opciones) y **hashtags sugeridos** (5 preseleccionados, tocables), con vista previa del texto (`components/PublicarYa.tsx`, `lib/sugerencias.ts`, con pruebas).
 - `POST /api/schedule/lote` acepta `ahora: true` (un solo item): crea el post y **dispara `/api/cron` desde el servidor**, así sale en segundos aunque el cron externo esté parado (requiere `CRON_SECRET` en Vercel).
 - Las sugerencias salen de la descripción original + etiquetas de alcance; **no consultan tendencias en vivo**.
+
+## v3.5 — tendencias del día en "Publicar ahora"
+- Nuevo `GET /api/tendencias` (Google Trends RSS por país, caché 30 min, país por defecto `DO`; cámbialo con la variable `TRENDS_GEO`, p. ej. `US`, `MX`, `ES`).
+- En la ventana de publicar aparecen las tendencias como hashtags tocables; ⭐ marca las que coinciden con la descripción del video. Facebook no tiene API pública de tendencias: es una señal de búsqueda, no de Facebook. **Sin probar contra Google Trends real** (el entorno de desarrollo no llega a él): si falla, la sección simplemente no aparece.

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { armarMensaje, sugerirHashtags, sugerirTitulos } from "../lib/sugerencias";
+import type { Tendencia } from "../lib/tendencias";
 
 interface Theme { cardBg: string; formBg: string; border: string; text: string; subtext: string; accent: string; accentBg: string; accentText?: string }
 interface Cuenta { id: number; nombre: string }
@@ -23,6 +24,8 @@ export default function PublicarYa({ video, theme, onCerrar, onHecho }: { video:
   const [elegidos, setElegidos] = useState<Set<string>>(new Set(tags.recomendados));
   const [texto, setTexto] = useState(() => (video.descripcion || "").replace(/#[\p{L}\p{N}_]+/gu, "").replace(/\s+/g, " ").trim());
   const [enviando, setEnviando] = useState(false);
+  const [tendencias, setTendencias] = useState<Tendencia[] | null>(null);
+  const [geo, setGeo] = useState("");
 
   useEffect(() => {
     fetch("/api/accounts").then((r) => r.json()).then((d) => {
@@ -31,6 +34,13 @@ export default function PublicarYa({ video, theme, onCerrar, onHecho }: { video:
       if (c.length) setCuentaId(c[0].id);
     }).catch(() => toast.error("No se pudieron cargar las cuentas"));
   }, []);
+
+  useEffect(() => {
+    fetch(`/api/tendencias?desc=${encodeURIComponent(desc.slice(0, 400))}`)
+      .then((r) => r.json())
+      .then((d) => { setTendencias(d.tendencias || []); setGeo(d.geo || ""); })
+      .catch(() => setTendencias([]));
+  }, [desc]);
 
   useEffect(() => {
     setSel(new Set());
@@ -122,6 +132,19 @@ export default function PublicarYa({ video, theme, onCerrar, onHecho }: { video:
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {tags.todos.map((h) => <button key={h} style={chip(elegidos.has(h))} onClick={() => alternar(h)}>{h}</button>)}
         </div>
+
+        {tendencias && tendencias.some((t) => t.hashtag) && (
+          <>
+            <label style={etiqueta}>🔥 Tendencias de hoy {geo && `(${geo})`} <span style={{ color: theme.subtext, fontWeight: 400 }}>(⭐ = tiene que ver con tu video; usa solo las que encajen)</span></label>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {tendencias.filter((t) => t.hashtag).slice(0, 10).map((t) => (
+                <button key={t.termino} style={chip(elegidos.has(t.hashtag!))} title={t.trafico ? `${t.trafico} búsquedas` : undefined} onClick={() => alternar(t.hashtag!)}>
+                  {t.relacionada ? "⭐ " : ""}{t.hashtag}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
         <div style={{ fontSize: 12, color: theme.subtext, margin: "14px 0 4px" }}>Así se verá el texto del post:</div>
         <div style={{ whiteSpace: "pre-wrap", fontSize: 13, border: `1px dashed ${theme.border}`, borderRadius: 6, padding: 8, minHeight: 36 }}>{mensaje || "(sin texto)"}</div>
