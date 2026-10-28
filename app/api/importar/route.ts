@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     }
     if (!validas.size) {
       return NextResponse.json(
-        { error: "Ningún enlace válido. Usa enlaces de TikTok (tiktok.com/@usuario/video/…, vm.tiktok.com/…) o @usuario.", invalidos },
+        { error: "Ningún enlace válido. Usa enlaces de TikTok (tiktok.com/@usuario/video/…, vm.tiktok.com/…), de Instagram (instagram.com/reel/…, /p/…) o @usuario de TikTok.", invalidos },
         { status: 400 }
       );
     }

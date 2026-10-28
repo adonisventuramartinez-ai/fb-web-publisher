@@ -95,13 +95,13 @@ export default function TikTok({ theme, onIr }: { theme: Theme; onIr: (s: Seccio
 
   return (
     <div style={{ color: theme.text }}>
-      <h3 style={{ fontSize: 16, fontWeight: 500, margin: "0 0 12px" }}>🎵 Importar de TikTok</h3>
+      <h3 style={{ fontSize: 16, fontWeight: 500, margin: "0 0 12px" }}>🎵 Importar de TikTok e Instagram</h3>
 
       <div style={caja}>
         <textarea
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
-          placeholder={"Pega enlaces de videos (uno por línea) o un perfil (@usuario)\nhttps://www.tiktok.com/@usuario/video/123…\nhttps://vm.tiktok.com/ZM…\n@usuario"}
+          placeholder={"Pega enlaces de videos de TikTok o Instagram (uno por línea) o un perfil de TikTok (@usuario)\nhttps://www.tiktok.com/@usuario/video/123…\nhttps://vm.tiktok.com/ZM…\nhttps://www.instagram.com/reel/C8…\n@usuario"}
           style={{ width: "100%", minHeight: 100, padding: 10, borderRadius: 6, border: `1px solid ${theme.border}`, background: theme.cardBg, color: theme.text, boxSizing: "border-box" }}
         />
         <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
@@ -109,7 +109,7 @@ export default function TikTok({ theme, onIr }: { theme: Theme; onIr: (s: Seccio
             {enviando ? "Enviando…" : "Importar"}
           </button>
           <span style={{ fontSize: 12, color: theme.subtext }}>
-            ⚠️ Úsalo con contenido tuyo o con permiso de su autor. Republicar videos ajenos puede violar derechos de autor y las reglas de TikTok y Facebook.
+            ⚠️ Se descargan sin marca de agua. Úsalo con contenido tuyo o con permiso de su autor: republicar videos ajenos puede violar derechos de autor y las reglas de TikTok, Instagram y Facebook.
           </span>
         </div>
       </div>
@@ -180,7 +180,7 @@ export default function TikTok({ theme, onIr }: { theme: Theme; onIr: (s: Seccio
           <span style={{ flex: 1 }} />
           {listos.length > 0 && <button style={principal} onClick={() => onIr("lote")}>📦 Programar en lote →</button>}
         </div>
-        {listos.length === 0 && <div style={{ fontSize: 13, color: theme.subtext }}>Los videos descargados aparecerán aquí.</div>}
+        {listos.length === 0 && <div style={{ fontSize: 13, color: theme.subtext }}>Los videos descargados (TikTok o Instagram) aparecerán aquí.</div>}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
           {listos.map((i) => (
             <div key={i.id} style={{ border: `1px solid ${theme.border}`, borderRadius: 8, overflow: "hidden", background: theme.cardBg }}>

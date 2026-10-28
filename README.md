@@ -1,7 +1,7 @@
 # Publicador Multi-Página de Facebook · v3.2
 
 Next.js 15 + Supabase + Vercel. Publica fotos, videos y reels en varias páginas, ahora o programado, con
-programación en lote, series recurrentes e importación desde TikTok.
+programación en lote, series recurrentes e importación desde TikTok e Instagram.
 
 > **Qué cambió en la v3.2 → lee [`CAMBIOS.md`](./CAMBIOS.md).** Resumen: cron que no duplica ni se atasca,
 > limpieza automática de Storage, diagnóstico en `/admin`, sesiones revocables, freno anti fuerza bruta,

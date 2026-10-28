@@ -22,6 +22,8 @@ from pathlib import Path
 import requests
 from yt_dlp import YoutubeDL
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sin_marca import SinMarcaError, descargar_sin_marca, plataforma_de  # noqa: E402
 
 
 def _env(*nombres: str) -> str:
@@ -57,8 +59,12 @@ MAX_BYTES = int(os.environ.get("MAX_BYTES", str(50 * 1024 * 1024)))  # límite d
 PERFIL_MAX = int(os.environ.get("PERFIL_MAX", "30"))
 RESCATE_MIN = 20
 
-# Solo TikTok, también aquí (defensa en profundidad: la API ya lo valida)
-URL_OK = re.compile(r"^https://(www\.|m\.|vm\.|vt\.)?tiktok\.com/", re.I)
+# Solo TikTok e Instagram, también aquí (defensa en profundidad: la API ya lo valida)
+URL_OK = re.compile(r"^https://((www\.|m\.|vm\.|vt\.)?tiktok\.com|(www\.|m\.)?instagram\.com|instagr\.am)/", re.I)
+# Los perfiles solo se listan en TikTok (Instagram exige iniciar sesión)
+URL_TIKTOK = re.compile(r"^https://(www\.|m\.|vm\.|vt\.)?tiktok\.com/", re.I)
+# SIN_MARCA=off desactiva ssstik/sssinstagram y usa solo yt-dlp
+USAR_SSS = os.environ.get("SIN_MARCA", "on").strip().lower() not in ("off", "0", "no", "false")
 
 HEADERS = {"apikey": KEY} if KEY.startswith("sb_") else {"apikey": KEY, "Authorization": f"Bearer {KEY}"}
 
@@ -129,6 +135,8 @@ def error_amigable(exc: Exception, tipo: str = "video") -> str:
         return "El video ya no está disponible (borrado o con restricción de región)." if tipo == "video" else "No se encontró ese perfil."
     if any(x in sin_ids for x in ("captcha", "blocked", "too many requests", "rate limit", "forbidden")) or re.search(r"\b(403|429)\b", sin_ids):
         return "TikTok bloqueó temporalmente la descarga (suele pasar con las IP de GitHub). Reintenta en unos minutos o configura TIKTOK_COOKIES."
+    if any(x in sin_ids for x in ("login required", "log in", "empty media response", "rate-limit", "cookies")) and "instagram" in bajo:
+        return "Instagram pide iniciar sesión o bloqueó la IP del worker. Reintenta más tarde o crea el secret INSTAGRAM_COOKIES (cookies.txt de tu cuenta)."
     if any(x in sin_ids for x in ("unable to extract", "secondary user", "sigi_state", "user id")):
         if tipo == "perfil":
             return "No se pudo leer el perfil (TikTok lo bloquea a veces). Pega enlaces de videos sueltos o configura TIKTOK_COOKIES."
@@ -169,7 +177,7 @@ def a_mp4_h264(origen: Path, destino: Path, crf: int = 23, ancho_max: int = 0):
 
 
 # ---------------------------------------------------------------- yt-dlp
-def opciones_base(carpeta: Path) -> dict:
+def opciones_base(carpeta: Path, url: str = "") -> dict:
     o = {
         "quiet": True, "no_warnings": True, "noprogress": True, "noplaylist": True,
         "socket_timeout": 30, "retries": 3, "fragment_retries": 3, "restrictfilenames": True,
@@ -177,7 +185,7 @@ def opciones_base(carpeta: Path) -> dict:
         "format": "b[vcodec^=h264]/b[vcodec^=avc]/b/bv*+ba",
         "merge_output_format": "mp4",
     }
-    cookies = os.environ.get("TIKTOK_COOKIES", "").strip()
+    cookies = os.environ.get("INSTAGRAM_COOKIES" if plataforma_de(url) == "instagram" else "TIKTOK_COOKIES", "").strip()
     if cookies:
         f = carpeta / "cookies.txt"
         f.write_text(cookies, encoding="utf-8")
@@ -187,7 +195,7 @@ def opciones_base(carpeta: Path) -> dict:
 
 def procesar_perfil(job: dict):
     with tempfile.TemporaryDirectory() as t:
-        o = opciones_base(Path(t))
+        o = opciones_base(Path(t), job["url"])
         o.update({"extract_flat": "in_playlist", "playlistend": PERFIL_MAX, "skip_download": True, "noplaylist": False})
         info = YoutubeDL(o).extract_info(job["url"], download=False) or {}
     videos = []
@@ -195,9 +203,9 @@ def procesar_perfil(job: dict):
         if not e:
             continue
         u = e.get("url") or e.get("webpage_url")
-        if (not u or not URL_OK.match(u)) and e.get("id") and (e.get("uploader") or info.get("uploader")):
+        if (not u or not URL_TIKTOK.match(u)) and e.get("id") and (e.get("uploader") or info.get("uploader")):
             u = f"https://www.tiktok.com/@{e.get('uploader') or info.get('uploader')}/video/{e['id']}"
-        if u and URL_OK.match(u):
+        if u and URL_TIKTOK.match(u):
             titulo = limpiar(e.get("title") or e.get("description") or "")[:150]
             videos.append({"url": u, "titulo": titulo, "duracion": int(e.get("duration") or 0) or None})
     if not videos:
@@ -208,16 +216,32 @@ def procesar_perfil(job: dict):
     })
 
 
+def obtener_video(job: dict, carpeta: Path):
+    """Devuelve (archivo, info). Primero ssstik/sssinstagram (sin marca de agua); si fallan, yt-dlp."""
+    if USAR_SSS:
+        try:
+            r = descargar_sin_marca(job["url"], carpeta)
+            print(f"  descargado sin marca con {'sssinstagram' if plataforma_de(job['url']) == 'instagram' else 'ssstik'}")
+            return r["archivo"], {"title": r.get("titulo"), "description": r.get("titulo"), "uploader": r.get("autor")}
+        except SinMarcaError as e:
+            print(f"  (sss falló: {limpiar(e)[:200]}; se usa yt-dlp)")
+        except Exception as e:  # cualquier cosa rara de red/parseo: no debe tumbar la importación
+            print(f"  (sss error inesperado: {limpiar(e)[:200]}; se usa yt-dlp)")
+
+    for resto in carpeta.glob("sss_*"):  # restos de un intento fallido de sss
+        resto.unlink(missing_ok=True)
+    with YoutubeDL(opciones_base(carpeta, job["url"])) as ydl:
+        info = ydl.extract_info(job["url"], download=True) or {}
+    candidatos = [p for p in carpeta.iterdir() if p.suffix.lower() in (".mp4", ".mov", ".webm", ".mkv")]
+    if not candidatos:
+        raise RuntimeError("yt-dlp no produjo ningún archivo de video.")
+    return max(candidatos, key=lambda p: p.stat().st_size), info
+
+
 def procesar_video(job: dict):
     with tempfile.TemporaryDirectory() as t:
         carpeta = Path(t)
-        with YoutubeDL(opciones_base(carpeta)) as ydl:
-            info = ydl.extract_info(job["url"], download=True) or {}
-
-        candidatos = [p for p in carpeta.iterdir() if p.suffix.lower() in (".mp4", ".mov", ".webm", ".mkv")]
-        if not candidatos:
-            raise RuntimeError("yt-dlp no produjo ningún archivo de video.")
-        bruto = max(candidatos, key=lambda p: p.stat().st_size)
+        bruto, info = obtener_video(job, carpeta)
 
         final = carpeta / "final.mp4"
         a_mp4_h264(bruto, final)
@@ -264,7 +288,9 @@ def procesar(job: dict):
     print(f"[{job['id']}] {job['tipo']} {job['url']}")
     try:
         if not URL_OK.match(job.get("url", "")):
-            raise RuntimeError("Enlace no permitido (solo tiktok.com).")
+            raise RuntimeError("Enlace no permitido (solo tiktok.com e instagram.com).")
+        if job["tipo"] == "perfil" and not URL_TIKTOK.match(job["url"]):
+            raise RuntimeError("Los perfiles solo se pueden listar en TikTok. En Instagram pega el enlace de cada reel.")
         (procesar_perfil if job["tipo"] == "perfil" else procesar_video)(job)
         print(f"[{job['id']}] listo")
     except Exception as e:

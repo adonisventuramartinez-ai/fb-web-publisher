@@ -264,7 +264,7 @@ export default function Lote({ theme }: { theme: Theme }) {
         if (!disp.length) return null;
         return (
           <div style={caja}>
-            <label style={etiqueta}>🎵 Importados de TikTok ({disp.length} listos)</label>
+            <label style={etiqueta}>🎵 Importados de TikTok / Instagram ({disp.length} listos)</label>
             <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
               <button onClick={() => setSelImp(new Set(disp.map((i) => i.id)))}>Marcar todos</button>
               <button onClick={() => setSelImp(new Set())}>Ninguno</button>

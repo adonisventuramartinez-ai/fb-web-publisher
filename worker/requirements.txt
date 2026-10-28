@@ -1,3 +1,5 @@
 requests>=2.32
 # curl-cffi permite a yt-dlp "imitar" un navegador real; TikTok bloquea mucho menos así.
 yt-dlp[default,curl-cffi]
+# Chromium sin pantalla: lo usa sssinstagram.com (firma sus peticiones con JavaScript).
+playwright>=1.45

@@ -38,3 +38,13 @@
 5. Sin cabecera `Content-Security-Policy` (Next necesita scripts inline; hay que hacerlo con nonces y probarlo en navegador).
 6. 2 avisos de `npm audit` quedan hasta migrar a Next 16.
 7. Las variables `NEXT_PUBLIC_*` se fijan al compilar: tras cambiarlas hay que hacer redeploy.
+
+---
+
+# v3.3 — Instagram + descarga sin marca de agua
+
+- **Instagram**: acepta `instagram.com/reel/…`, `/reels/…`, `/p/…`, `/tv/…`, `/share/reel/…` y `/usuario/reel/…` (`lib/tiktok.ts`, con pruebas). Los perfiles de Instagram no se listan (exigen sesión): pega cada reel.
+- **Sin marca de agua** (`worker/sin_marca.py`): TikTok → **ssstik.io**; Instagram → **sssinstagram.com** (Chromium sin pantalla vía Playwright). Si el sitio falla, cambia o bloquea la IP de GitHub, el worker **cae solo a yt-dlp** (que en TikTok también suele traer la versión sin marca). `SIN_MARCA=off` (Variables del repo → Actions) lo desactiva.
+- Secret opcional `INSTAGRAM_COOKIES` (cookies.txt Netscape) por si Instagram pide iniciar sesión.
+- Se eliminaron `.env.local` y `.env.production` del zip (traían `FB_APP_SECRET`: **rótalo**).
+- **No verificado contra los sitios reales** (el entorno de desarrollo no puede alcanzarlos): ssstik se probó contra un servidor simulado; sssinstagram usa heurísticas genéricas. Revisa el log de Actions en la primera importación: dirá `descargado sin marca con …` o `sss falló: … se usa yt-dlp`.
