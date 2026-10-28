@@ -221,7 +221,12 @@ DETALLE_SSS: dict = {}  # id de importación -> por qué falló ssstik/sssinstag
 
 def obtener_video(job: dict, carpeta: Path):
     """Devuelve (archivo, info). Primero ssstik/sssinstagram (sin marca de agua); si fallan, yt-dlp."""
-    if USAR_SSS:
+    # Instagram no lleva marca de agua: con cookies se va directo a yt-dlp (lo más fiable).
+    if plataforma_de(job["url"]) == "instagram" and os.environ.get("INSTAGRAM_COOKIES", "").strip():
+        usar_sss = False
+    else:
+        usar_sss = USAR_SSS
+    if usar_sss:
         try:
             r = descargar_sin_marca(job["url"], carpeta)
             print(f"  descargado sin marca con {'sssinstagram' if plataforma_de(job['url']) == 'instagram' else 'ssstik'}")
