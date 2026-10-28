@@ -48,3 +48,8 @@
 - Secret opcional `INSTAGRAM_COOKIES` (cookies.txt Netscape) por si Instagram pide iniciar sesión.
 - Se eliminaron `.env.local` y `.env.production` del zip (traían `FB_APP_SECRET`: **rótalo**).
 - **No verificado contra los sitios reales** (el entorno de desarrollo no puede alcanzarlos): ssstik se probó contra un servidor simulado; sssinstagram usa heurísticas genéricas. Revisa el log de Actions en la primera importación: dirá `descargado sin marca con …` o `sss falló: … se usa yt-dlp`.
+
+## v3.4 — botón "🚀 Publicar ahora" en los videos importados
+- Cada video "Listo" (TikTok o Instagram) tiene botón **Publicar ahora**: elige cuenta/páginas, Reel o Video, **título sugerido** (6 opciones) y **hashtags sugeridos** (5 preseleccionados, tocables), con vista previa del texto (`components/PublicarYa.tsx`, `lib/sugerencias.ts`, con pruebas).
+- `POST /api/schedule/lote` acepta `ahora: true` (un solo item): crea el post y **dispara `/api/cron` desde el servidor**, así sale en segundos aunque el cron externo esté parado (requiere `CRON_SECRET` en Vercel).
+- Las sugerencias salen de la descripción original + etiquetas de alcance; **no consultan tendencias en vivo**.

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../../lib/db";
 import { desencriptar, encriptar } from "../../../../lib/crypto";
-import { GRAPH_BASE } from "../../../../lib/graph";
+import { GRAPH_BASE, appUrl } from "../../../../lib/graph";
 import { noAutorizado, sesionDe } from "../../../../lib/auth";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const TIPOS = ["foto", "video", "reel"];
 const MAX_LOTE = 60;
@@ -17,7 +17,8 @@ export async function POST(req: NextRequest) {
   if (!sesion) return noAutorizado();
 
   try {
-    const { cuenta_id, paginas, tipo, items } = await req.json();
+    const { cuenta_id, paginas, tipo, items, ahora: publicarYa } = await req.json();
+    const modoAhora = publicarYa === true && Array.isArray(items) && items.length === 1;
 
     if (!cuenta_id || !Array.isArray(paginas) || !paginas.length || !TIPOS.includes(tipo) || !Array.isArray(items)) {
       return NextResponse.json({ error: "Faltan datos obligatorios" }, { status: 400 });
@@ -32,8 +33,8 @@ export async function POST(req: NextRequest) {
     const ahora = Date.now();
     const filas: any[] = [];
     for (const it of items) {
-      const fecha = new Date(it?.fecha_programada);
-      if (isNaN(fecha.getTime()) || fecha.getTime() <= ahora) {
+      const fecha = modoAhora ? new Date(ahora - 1000) : new Date(it?.fecha_programada);
+      if (isNaN(fecha.getTime()) || (!modoAhora && fecha.getTime() <= ahora)) {
         return NextResponse.json({ error: `Fecha inválida o pasada en "${it?.archivo_nombre || "un elemento"}"` }, { status: 400 });
       }
       const ruta = it?.archivo_url;
@@ -101,7 +102,24 @@ export async function POST(req: NextRequest) {
         .then(() => {}, () => {});
     }
 
-    return NextResponse.json({ creados: data?.length ?? 0 });
+    // "Publicar ahora": se dispara el cron desde el servidor para que salga ya, sin esperar al cron externo.
+    let publicacion: { ok: boolean; error?: string } | undefined;
+    if (modoAhora) {
+      const secreto = (process.env.CRON_SECRET || "").trim();
+      if (!secreto) {
+        publicacion = { ok: false, error: "Falta CRON_SECRET en Vercel: el post quedó en cola y saldrá cuando corra el cron." };
+      } else {
+        try {
+          const base = appUrl(new URL(req.url).origin);
+          const rc = await fetch(`${base}/api/cron`, { headers: { Authorization: `Bearer ${secreto}` }, signal: AbortSignal.timeout(50_000), cache: "no-store" });
+          publicacion = rc.ok ? { ok: true } : { ok: false, error: `El cron respondió ${rc.status}` };
+        } catch (e: any) {
+          publicacion = { ok: false, error: `No se pudo disparar el cron: ${e?.message || e}` };
+        }
+      }
+    }
+
+    return NextResponse.json({ creados: data?.length ?? 0, ids: (data || []).map((d: any) => d.id), publicacion });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Error al programar el lote" }, { status: 500 });
   }

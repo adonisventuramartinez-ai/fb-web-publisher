@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import type { Seccion } from "./Sidebar";
+import PublicarYa, { VideoListo } from "./PublicarYa";
 
 interface Theme { cardBg: string; formBg: string; border: string; text: string; subtext: string; accent: string; accentBg: string; accentText?: string }
 
 interface Importacion {
   id: number; tipo: "video" | "perfil"; url: string; estado: string; titulo: string | null; autor: string | null;
   duracion: number | null; bytes: number | null; miniatura: string | null; error: string | null;
+  descripcion?: string | null; archivo_url?: string | null;
   videos: { url: string; titulo: string; duracion: number | null }[] | null;
 }
 
@@ -23,6 +25,7 @@ export default function TikTok({ theme, onIr }: { theme: Theme; onIr: (s: Seccio
   const [enviando, setEnviando] = useState(false);
   const [abierto, setAbierto] = useState<number | null>(null);
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
+  const [publicando, setPublicando] = useState<VideoListo | null>(null);
 
   async function cargar() {
     try {
@@ -190,12 +193,20 @@ export default function TikTok({ theme, onIr }: { theme: Theme; onIr: (s: Seccio
               <div style={{ padding: 8, fontSize: 12 }}>
                 <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{i.titulo || "Sin descripción"}</div>
                 <div style={{ color: theme.subtext }}>{[i.autor && `@${i.autor}`, seg(i.duracion), mb(i.bytes)].filter(Boolean).join(" · ")}</div>
-                <button style={{ ...boton, marginTop: 6 }} onClick={() => accion(i.id, "borrar")}>Quitar</button>
+                <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                  <button
+                    style={{ ...principal, padding: "5px 10px", fontSize: 12, borderRadius: 6 }}
+                    disabled={!i.archivo_url}
+                    onClick={() => i.archivo_url && setPublicando({ id: i.id, titulo: i.titulo, descripcion: i.descripcion ?? null, autor: i.autor, archivo_url: i.archivo_url, miniatura: i.miniatura })}
+                  >🚀 Publicar ahora</button>
+                  <button style={boton} onClick={() => accion(i.id, "borrar")}>Quitar</button>
+                </div>
               </div>
             </div>
           ))}
         </div>
       </div>
+      {publicando && <PublicarYa video={publicando} theme={theme} onCerrar={() => setPublicando(null)} onHecho={cargar} />}
     </div>
   );
 }
