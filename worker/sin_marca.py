@@ -5,6 +5,7 @@ Pueden cambiar sin avisar, así que TODO está pensado para fallar "en limpio": 
 lanza `SinMarcaError` y el worker cae automáticamente a yt-dlp. Nada de aquí rompe una importación.
 """
 import html
+import os
 import re
 import time
 from pathlib import Path
@@ -133,10 +134,12 @@ def ssstik(url: str, carpeta: Path) -> dict:
 
 
 # ------------------------------------------------------------------ Instagram · sssinstagram.com
-SSSINSTA = "https://sssinstagram.com"
+# Se prueban en orden; SSSINSTA_URLS (separadas por coma) permite cambiarlas sin tocar el código.
+SSSINSTA_SITIOS = [u.strip() for u in os.environ.get("SSSINSTA_URLS", "https://www.sssgram.com/sssinstagram/,https://sssinstagram.com/es").split(",") if u.strip()]
+SSSINSTA = SSSINSTA_SITIOS[0]
 
 
-def sssinstagram(url: str, carpeta: Path) -> dict:
+def _sssinstagram_sitio(url: str, carpeta: Path, sitio: str) -> dict:
     """Pega el enlace en sssinstagram.com con un Chromium sin pantalla (Playwright) y baja el video.
 
     Se usa un navegador real porque el sitio firma sus peticiones con JavaScript. Si Playwright
@@ -151,7 +154,7 @@ def sssinstagram(url: str, carpeta: Path) -> dict:
     enlaces_pagina: list[str] = []
     try:
         with sync_playwright() as p:
-            nav = p.chromium.launch(headless=True, args=["--no-sandbox"])
+            nav = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-blink-features=AutomationControlled"])
             ctx = nav.new_context(user_agent=UA, viewport={"width": 1280, "height": 900})
             pag = ctx.new_page()
 
@@ -163,9 +166,21 @@ def sssinstagram(url: str, carpeta: Path) -> dict:
                     pass
 
             pag.on("response", al_responder)
-            pag.goto(SSSINSTA, wait_until="domcontentloaded", timeout=45_000)
-            caja = pag.locator("input[type=text], input[type=url], input[name=url], input#input, input").first
-            caja.wait_for(state="visible", timeout=15_000)
+            pag.goto(sitio, wait_until="domcontentloaded", timeout=45_000)
+            pag.wait_for_timeout(4000)  # deja pasar la verificación de Cloudflare si es automática
+            for txt in ("Accept", "Agree", "Consent", "Aceptar", "OK"):  # aviso de cookies
+                try:
+                    pag.get_by_role("button", name=re.compile(rf"^{txt}", re.I)).first.click(timeout=800)
+                    break
+                except Exception:
+                    pass
+            caja = pag.locator("input[type=text]:visible, input[type=url]:visible, input[name=url]:visible, input:not([type=hidden]):visible").first
+            try:
+                caja.wait_for(state="visible", timeout=25_000)
+            except Exception:
+                titulo = (pag.title() or "")[:60]
+                cuerpo = re.sub(r"\s+", " ", pag.inner_text("body") or "")[:140]
+                raise SinMarcaError(f"no apareció el formulario; la página mostró: «{titulo}» {cuerpo}")
             caja.fill(url)
             boton = pag.locator("button[type=submit], form button, button:has-text('Download'), button:has-text('Descargar')").first
             boton.click(timeout=10_000)
@@ -179,7 +194,8 @@ def sssinstagram(url: str, carpeta: Path) -> dict:
                         txt = (a.inner_text() or "").lower()
                     except Exception:
                         continue
-                    propio = urlparse(href).hostname and "sssinstagram.com" in urlparse(href).hostname
+                    host_sitio = (urlparse(sitio).hostname or "").replace("www.", "")
+                    propio = host_sitio and host_sitio in (urlparse(href).hostname or "")
                     if not propio and ("download" in txt or "descargar" in txt or re.search(r"\.mp4|/v/t\d|cdninstagram|fbcdn|ssscdn", href)):
                         if href not in enlaces_pagina:
                             enlaces_pagina.append(href)
@@ -197,11 +213,21 @@ def sssinstagram(url: str, carpeta: Path) -> dict:
     for c in candidatos[:4]:
         destino = carpeta / "sss_instagram.mp4"
         try:
-            _guardar_video(c, destino, SSSINSTA)
+            _guardar_video(c, destino, sitio)
             return {"archivo": destino, "titulo": "", "autor": ""}
         except SinMarcaError as e:  # probablemente era una imagen o un enlace de audio: se prueba el siguiente
             ultimo = e
     raise SinMarcaError(str(ultimo) if ultimo else "ningún enlace era un video")
+
+
+def sssinstagram(url: str, carpeta: Path) -> dict:
+    errores = []
+    for sitio in SSSINSTA_SITIOS:
+        try:
+            return _sssinstagram_sitio(url, carpeta, sitio)
+        except SinMarcaError as e:
+            errores.append(f"{urlparse(sitio).hostname}: {e}")
+    raise SinMarcaError(" | ".join(errores)[:300])
 
 
 def descargar_sin_marca(url: str, carpeta: Path) -> dict:
