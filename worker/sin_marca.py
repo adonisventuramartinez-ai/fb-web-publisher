@@ -182,8 +182,23 @@ def _sssinstagram_sitio(url: str, carpeta: Path, sitio: str) -> dict:
                 cuerpo = re.sub(r"\s+", " ", pag.inner_text("body") or "")[:140]
                 raise SinMarcaError(f"no apareció el formulario; la página mostró: «{titulo}» {cuerpo}")
             caja.fill(url)
-            boton = pag.locator("button[type=submit], form button, button:has-text('Download'), button:has-text('Descargar')").first
-            boton.click(timeout=10_000)
+            enviado = False
+            try:  # lo más fiable: Enter dentro de la caja (no depende del diseño del botón)
+                caja.press("Enter", timeout=3000)
+                enviado = True
+            except Exception:
+                pass
+            pag.wait_for_timeout(1500)
+            if not pag.locator("a[href^='http']:has-text('Download'), a[href^='http']:has-text('Descargar')").count():
+                for patron in (r"download|descargar|get|search|buscar|go", r".*"):
+                    try:
+                        pag.get_by_role("button", name=re.compile(patron, re.I)).first.click(timeout=4000)
+                        enviado = True
+                        break
+                    except Exception:
+                        continue
+            if not enviado:
+                raise SinMarcaError("no se pudo enviar el formulario (ni Enter ni botón)")
 
             limite = time.time() + 40
             while time.time() < limite and not enlaces_pagina:
@@ -226,8 +241,8 @@ def sssinstagram(url: str, carpeta: Path) -> dict:
         try:
             return _sssinstagram_sitio(url, carpeta, sitio)
         except SinMarcaError as e:
-            errores.append(f"{urlparse(sitio).hostname}: {e}")
-    raise SinMarcaError(" | ".join(errores)[:300])
+            errores.append(f"{urlparse(sitio).hostname}: {str(e)[:140]}")
+    raise SinMarcaError(" | ".join(errores)[:380])
 
 
 def descargar_sin_marca(url: str, carpeta: Path) -> dict:
