@@ -69,10 +69,11 @@ export async function POST(req: NextRequest) {
   if (!Array.isArray(ids) || !ids.length || ids.length > MAX_IDS || !ids.every(idValido)) {
     return NextResponse.json({ error: `Manda entre 1 y ${MAX_IDS} IDs válidos` }, { status: 400 });
   }
-  const unicos = [...new Set(ids as string[])];
+  const unicos: string[] = Array.from(new Set<string>(ids as string[]));
 
   const ctx = await contexto(sesion.sub, body.cuenta, body.pagina);
   if ("error" in ctx) return NextResponse.json({ error: ctx.error }, { status: ctx.status });
+  const token: string = ctx.token; // fuera del closure: TypeScript no conserva el estrechamiento dentro de obrero()
 
   const inicio = Date.now();
   const resultados: { id: string; ok: boolean; yaNoExistia?: boolean; error?: string; codigo?: number }[] = [];
@@ -83,10 +84,10 @@ export async function POST(req: NextRequest) {
   // 3 en paralelo; se detiene todo ante un error de permisos/token o de límite de ritmo
   async function obrero() {
     while (!pausa && !fatal && Date.now() - inicio < PRESUPUESTO_MS) {
-      const i = siguiente++;
-      if (i >= unicos.length) return;
-      const r = await borrar(ctx.token, unicos[i]);
-      resultados.push({ id: unicos[i], ...r });
+      const id: string | undefined = unicos[siguiente++];
+      if (id === undefined) return;
+      const r = await borrar(token, id);
+      resultados.push({ id, ...r });
       if (!r.ok && esLimiteDeRitmo(r.codigo)) pausa = true;
       if (!r.ok && esFatal(r.codigo)) fatal = true;
       await new Promise((ok) => setTimeout(ok, 250));
