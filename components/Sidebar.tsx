@@ -8,7 +8,7 @@ interface Theme {
 
 export type Seccion =
   | "inicio" | "publicar" | "tiktok" | "programadas" | "lote" | "calendario" | "cola"
-  | "historial" | "dashboard" | "cuentas";
+  | "historial" | "dashboard" | "eliminar" | "cuentas";
 
 const ITEMS: { id: Seccion; icono: string; texto: string }[] = [
   { id: "inicio", icono: "🏠", texto: "Inicio" },
@@ -20,6 +20,7 @@ const ITEMS: { id: Seccion; icono: string; texto: string }[] = [
   { id: "cola", icono: "📋", texto: "Cola" },
   { id: "historial", icono: "📜", texto: "Historial" },
   { id: "dashboard", icono: "📊", texto: "Estadísticas" },
+  { id: "eliminar", icono: "🗑️", texto: "Eliminador" },
   { id: "cuentas", icono: "👥", texto: "Cuentas" },
 ];
 

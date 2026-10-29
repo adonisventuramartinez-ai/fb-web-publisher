@@ -1,4 +1,4 @@
-# Publicador Multi-Página de Facebook · v3.2
+# Publicador Multi-Página de Facebook · v3.6
 
 Next.js 15 + Supabase + Vercel. Publica fotos, videos y reels en varias páginas, ahora o programado, con
 programación en lote, series recurrentes e importación desde TikTok e Instagram.

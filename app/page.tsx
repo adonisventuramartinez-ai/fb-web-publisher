@@ -18,6 +18,7 @@ import Programador from "../components/Programador";
 import Lote from "../components/Lote";
 import TikTok from "../components/TikTok";
 import Sidebar, { Seccion } from "../components/Sidebar";
+import Eliminador from "../components/Eliminador";
 import Inicio from "../components/Inicio";
 import Cola from "../components/Cola";
 import Calendario from "../components/Calendario";
@@ -447,6 +448,8 @@ export default function Home() {
                 <Calendario theme={theme} />
               ) : tabActivo === "dashboard" ? (
                 <Dashboard historial={historial} theme={theme} />
+              ) : tabActivo === "eliminar" ? (
+                <Eliminador theme={theme} />
               ) : tabActivo === "cuentas" ? (
                 <CuentasManager tokenActual={token} theme={theme} />
               ) : tabActivo === "programadas" ? (

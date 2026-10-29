@@ -57,3 +57,21 @@
 ## v3.5 — tendencias del día en "Publicar ahora"
 - Nuevo `GET /api/tendencias` (Google Trends RSS por país, caché 30 min, país por defecto `DO`; cámbialo con la variable `TRENDS_GEO`, p. ej. `US`, `MX`, `ES`).
 - En la ventana de publicar aparecen las tendencias como hashtags tocables; ⭐ marca las que coinciden con la descripción del video. Facebook no tiene API pública de tendencias: es una señal de búsqueda, no de Facebook. **Sin probar contra Google Trends real** (el entorno de desarrollo no llega a él): si falla, la sección simplemente no aparece.
+
+---
+
+# v3.6 — 🗑️ Eliminador masivo
+
+Nueva pestaña **Eliminador** (menú lateral): borra reels, videos, fotos o publicaciones de tus páginas en bloque.
+
+- **Elegir**: cuenta → página → tipo (Reels / Videos / Fotos / Publicaciones). Carga el contenido de 100 en 100 o "todo" (hasta 3000), con miniatura, fecha y texto.
+- **Filtros**: texto, rango de fechas y antigüedad (más de 30 d / 90 d / 6 meses / 1 año). "Marcar los N filtrados" marca también los que no se ven en pantalla.
+- **Seguridad antes de borrar**: pantalla de confirmación con el recuento, casilla "no se puede deshacer", **respaldo CSV** (id, fecha, texto, enlace; no guarda el video) y hay que escribir `ELIMINAR <número>`.
+- **Al borrar**: lotes de 10, 3 en paralelo, barra de progreso, botón Detener, pausa automática de 60 s si Facebook limita el ritmo (códigos 4/17/32/613), parada si el token o los permisos fallan (190/200/10…), y **Reintentar los que faltan**. Si un objeto ya no existe cuenta como borrado (reintentar es seguro).
+- **Servidor** (`/api/eliminar`, `lib/fbEliminar.ts`): el token de página nunca sale al navegador; solo se puede tocar una página que la cuenta administre; IDs validados; tope de 150 llamadas/hora por usuario.
+- 7 pruebas nuevas (`tests/eliminador.test.ts`); acceso a Graph probado contra un Facebook simulado.
+
+**No verificado contra Facebook real.** Puntos a mirar en la primera prueba (borra 1 o 2 elementos de prueba primero):
+1. `GET /{pagina}/video_reels` para listar reels (si no lista, usa el tipo "Videos").
+2. Los errores de permisos salen por elemento en "Ver errores". El permiso usado es `pages_manage_posts` (ya está en el login).
+3. Los reels pueden aparecer tanto en "Reels" como en "Videos".
