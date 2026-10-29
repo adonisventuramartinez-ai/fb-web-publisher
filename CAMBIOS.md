@@ -75,3 +75,8 @@ Nueva pestaña **Eliminador** (menú lateral): borra reels, videos, fotos o publ
 1. `GET /{pagina}/video_reels` para listar reels (si no lista, usa el tipo "Videos").
 2. Los errores de permisos salen por elemento en "Ver errores". El permiso usado es `pages_manage_posts` (ya está en el login).
 3. Los reels pueden aparecer tanto en "Reels" como en "Videos".
+
+## v3.6.1 — Eliminador y el error (#4) "Application request limit reached"
+- El token de página se guarda 20 min en memoria (antes se pedía `/me/accounts` en cada lote, y esa llamada cuenta contra el límite de la APP).
+- Borrado más suave: 2 en paralelo con 600 ms entre cada uno.
+- Ante el límite: esperas progresivas (60 s, 120 s, 180 s…) con cuenta atrás; tras varias seguidas se detiene con aviso claro y se puede continuar luego con «Reintentar los que faltan».

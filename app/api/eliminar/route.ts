@@ -12,10 +12,20 @@ export const maxDuration = 60;
 const MAX_IDS = 15; // por llamada (el navegador va mandando lotes)
 const PRESUPUESTO_MS = 50_000;
 
+// El token de página se pide con /me/accounts (cuenta contra el límite de la APP, error #4).
+// Se guarda 20 min en memoria para no repetir esa llamada en cada lote de borrado.
+const CACHE_TOKEN = new Map<string, { token: string; nombre: string; hasta: number }>();
+const TTL_TOKEN_MS = 20 * 60_000;
+const claveCache = (sub: string, cuenta: unknown, pagina: unknown) => `${sub}:${cuenta}:${pagina}`;
+
 async function contexto(sesionSub: string, cuenta: unknown, pagina: unknown) {
   if (!/^\d{1,18}$/.test(String(cuenta)) || !/^\d{5,30}$/.test(String(pagina))) {
     return { error: "Cuenta o página no válida", status: 400 } as const;
   }
+  const clave = claveCache(sesionSub, cuenta, pagina);
+  const guardado = CACHE_TOKEN.get(clave);
+  if (guardado && guardado.hasta > Date.now()) return { token: guardado.token, nombre: guardado.nombre } as const;
+
   const { data, error } = await supabaseAdmin
     .from("cuentas_fb")
     .select("token_encriptado")
@@ -27,9 +37,14 @@ async function contexto(sesionSub: string, cuenta: unknown, pagina: unknown) {
   try {
     t = await tokenDePagina(desencriptar(data.token_encriptado), String(pagina));
   } catch (e: any) {
+    if (e instanceof ErrorGraph && esLimiteDeRitmo(e.codigo)) {
+      return { error: "Meta limitó las llamadas de tu app (error #" + e.codigo + "). Espera ~1 hora sin usar el panel y vuelve a intentar.", status: 429 } as const;
+    }
     return { error: "El token de esta cuenta expiró o es inválido: " + e.message + ". Usa 🔄 Reconectar en Cuentas.", status: 400 } as const;
   }
   if (!t) return { error: "Esa cuenta no administra esa página", status: 403 } as const;
+  if (CACHE_TOKEN.size > 100) CACHE_TOKEN.clear();
+  CACHE_TOKEN.set(clave, { token: t.token, nombre: t.nombre, hasta: Date.now() + TTL_TOKEN_MS });
   return { token: t.token, nombre: t.nombre } as const;
 }
 
@@ -50,6 +65,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ...r, pagina: ctx.nombre });
   } catch (e: any) {
     const codigo = e instanceof ErrorGraph ? e.codigo : undefined;
+    if (esFatal(codigo)) CACHE_TOKEN.delete(claveCache(sesion.sub, q.get("cuenta"), q.get("pagina")));
     return NextResponse.json({ error: e.message || "No se pudo leer el contenido", codigo, pausa: esLimiteDeRitmo(codigo) }, { status: 502 });
   }
 }
@@ -81,7 +97,7 @@ export async function POST(req: NextRequest) {
   let fatal = false;
   let siguiente = 0;
 
-  // 3 en paralelo; se detiene todo ante un error de permisos/token o de límite de ritmo
+  // 2 en paralelo; se detiene todo ante un error de permisos/token o de límite de ritmo
   async function obrero() {
     while (!pausa && !fatal && Date.now() - inicio < PRESUPUESTO_MS) {
       const id: string | undefined = unicos[siguiente++];
@@ -90,10 +106,11 @@ export async function POST(req: NextRequest) {
       resultados.push({ id, ...r });
       if (!r.ok && esLimiteDeRitmo(r.codigo)) pausa = true;
       if (!r.ok && esFatal(r.codigo)) fatal = true;
-      await new Promise((ok) => setTimeout(ok, 250));
+      await new Promise((ok) => setTimeout(ok, 600));
     }
   }
-  await Promise.all([obrero(), obrero(), obrero()]);
+  await Promise.all([obrero(), obrero()]);
+  if (fatal) CACHE_TOKEN.delete(claveCache(sesion.sub, body.cuenta, body.pagina));
 
   const hechos = new Set(resultados.filter((r) => r.ok || !esLimiteDeRitmo(r.codigo)).map((r) => r.id));
   // Los que dieron error de límite se reintentan: se devuelven como "sin procesar", no como fallo.

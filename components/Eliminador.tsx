@@ -69,6 +69,13 @@ export default function Eliminador({ theme }: { theme: Theme }) {
     setItems([]); setSel(new Set()); setCompleto(false); setFase("elegir"); setFallos([]); setAviso(""); setMostrar(120);
   }
 
+  // Espera con cuenta atrás visible. Devuelve false si se canceló durante la espera.
+  async function esperar(seg: number, cancelar: { current: boolean }, motivo: string) {
+    for (let t = seg; t > 0 && !cancelar.current; t--) { setAviso(`${motivo} Sigo en ${t} s…`); await dormir(1000); }
+    setAviso("");
+    return !cancelar.current;
+  }
+
   // Carga páginas de contenido hasta `hasta` elementos (o hasta que se acabe). Se puede detener.
   async function cargar(hasta: number) {
     if (!cuentaId || !paginaId || cargando) return;
@@ -76,13 +83,18 @@ export default function Eliminador({ theme }: { theme: Theme }) {
     cancelarCarga.current = false;
     let acumulado = [...items];
     let cursor = cursorRef.current;
+    let pausas = 0;
     try {
       while (!cancelarCarga.current && acumulado.length < hasta) {
         const q = new URLSearchParams({ cuenta: String(cuentaId), pagina: paginaId, tipo, ...(cursor ? { despues: cursor } : {}) });
         const r = await fetch(`/api/eliminar?${q}`);
         const d = await r.json().catch(() => ({}));
         if (!r.ok) {
-          if (d.pausa) { setAviso("Facebook pidió ir más despacio: pausa de 60 s…"); await dormir(60_000); setAviso(""); continue; }
+          if (d.pausa) {
+            if (++pausas > 3) throw new Error("Meta sigue limitando tu app (error #4). Espera ~1 hora y continúa; lo ya cargado se conserva.");
+            if (!(await esperar(60 * pausas, cancelarCarga, "Facebook limitó el ritmo (límite de la app)."))) break;
+            continue;
+          }
           throw new Error(d.error || "No se pudo leer el contenido");
         }
         const vistos = new Set(acumulado.map((i) => i.id));
@@ -126,6 +138,7 @@ export default function Eliminador({ theme }: { theme: Theme }) {
     const porId = new Map(lista.map((i) => [i.id, i]));
     const fallosAcum: { item: ItemFb; error: string }[] = [];
     let ok = 0;
+    let pausas = 0;
     const borrados = new Set<string>();
 
     for (const trozo of trocear(lista.map((i) => i.id), LOTE)) {
@@ -152,8 +165,12 @@ export default function Eliminador({ theme }: { theme: Theme }) {
         pendiente = d.sinProcesar || [];
         if (d.fatal) { parar.current = true; toast.error("Facebook rechazó el permiso o el token. Reconecta la cuenta y reintenta."); break; }
         if (d.pausa && pendiente.length) {
-          for (let s = 60; s > 0 && !parar.current; s--) { setAviso(`Facebook pidió ir más despacio. Sigo en ${s} s…`); await dormir(1000); }
-          setAviso("");
+          if (++pausas > 4) {
+            parar.current = true;
+            toast.error("Meta limitó tu app (error #4). Espera ~1 hora y pulsa «Reintentar los que faltan».");
+            break;
+          }
+          await esperar(Math.min(300, 60 * pausas), parar, "Facebook limitó el ritmo (límite de la app).");
         }
       }
       if (parar.current) break;
